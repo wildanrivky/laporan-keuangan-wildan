@@ -32,6 +32,40 @@ async function getSheet(name: string) {
       }
     });
     sheetId = res.data.replies?.[0]?.addSheet?.properties?.sheetId;
+  } else {
+    // Check if headers need fixing - get first row
+    const headerResult = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${name}!1:1`,
+    });
+    const headers = headerResult.data.values?.[0] || [];
+    
+    const correctHeaders = name === 'Rekening' 
+      ? ['id', 'nama', 'nomor', 'saldo', 'jenis']
+      : ['id', 'nama', 'tipe'];
+    
+    // If headers are wrong, delete and recreate sheet
+    const needsFix = headers.length !== correctHeaders.length || 
+                     headers[0] !== 'id' ||
+                     (name === 'Rekening' && headers.length < 5);
+    
+    if (needsFix) {
+      console.log(`Fixing sheet ${name} - deleting and recreating with correct headers`);
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+          requests: [{ deleteSheet: { sheetId: sheetId } }]
+        }
+      });
+      
+      const res = await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+          requests: [{ addSheet: { properties: { title: name } } }]
+        }
+      });
+      sheetId = res.data.replies?.[0]?.addSheet?.properties?.sheetId;
+    }
   }
   
   return { sheets, sheetId };
