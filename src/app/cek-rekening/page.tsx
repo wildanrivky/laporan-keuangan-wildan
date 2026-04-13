@@ -7,6 +7,7 @@ import { api, formatRupiah } from '@/lib/api';
 type Rekening = {
   id: string;
   nama: string;
+  nomor: string;
   saldo: number;
   jenis: string;
 };
@@ -20,12 +21,14 @@ export default function CekRekeningPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     nama: '',
+    nomor: '',
     saldo: '',
     jenis: 'Bank',
   });
 
   const resetForm = () => ({
     nama: '',
+    nomor: '',
     saldo: '',
     jenis: 'Bank',
   });
@@ -60,9 +63,9 @@ export default function CekRekeningPage() {
     e.preventDefault();
     try {
       if (editId) {
-        await api.updateRekening({ id: editId, saldo: parseInt(formData.saldo) });
+        await api.updateRekening({ id: editId, saldo: parseInt(formData.saldo), nama: formData.nama, nomor: formData.nomor });
       } else {
-        await api.addRekening({ nama: formData.nama, saldo: parseInt(formData.saldo), jenis: formData.jenis });
+        await api.addRekening({ nama: formData.nama, nomor: formData.nomor, saldo: parseInt(formData.saldo), jenis: formData.jenis });
       }
       const result = await api.getRekening();
       if (result.success && result.data) {
@@ -79,6 +82,7 @@ export default function CekRekeningPage() {
   const handleEdit = (r: Rekening) => {
     setFormData({
       nama: r.nama,
+      nomor: r.nomor || '',
       saldo: r.saldo.toString(),
       jenis: r.jenis,
     });
@@ -161,10 +165,11 @@ export default function CekRekeningPage() {
             <h2 className="text-lg font-semibold text-slate-900 mb-6">Daftar Rekening</h2>
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead>
+                  <thead>
                   <tr className="border-b border-slate-200">
                     <th className="text-left text-sm font-medium text-slate-500 py-3">Tipe</th>
                     <th className="text-left text-sm font-medium text-slate-500 py-3">Nama Rekening</th>
+                    <th className="text-left text-sm font-medium text-slate-500 py-3">Nomor Rekening</th>
                     <th className="text-right text-sm font-medium text-slate-500 py-3">Saldo</th>
                     <th className="text-right text-sm font-medium text-slate-500 py-3">Aksi</th>
                   </tr>
@@ -181,6 +186,7 @@ export default function CekRekeningPage() {
                         </div>
                       </td>
                       <td className="py-4 text-sm text-slate-900 font-medium">{r.nama}</td>
+                      <td className="py-4 text-sm text-slate-600 font-mono">{r.nomor || '-'}</td>
                       <td className="py-4 text-sm text-slate-900 text-right font-medium">
                         {formatRupiah(r.saldo)}
                       </td>
@@ -236,6 +242,16 @@ export default function CekRekeningPage() {
                   className="input"
                   placeholder="Contoh: Bank BCA"
                   required
+                />
+              </div>
+              <div>
+                <label className="label">Nomor Rekening</label>
+                <input
+                  type="text"
+                  value={formData.nomor}
+                  onChange={(e) => setFormData({...formData, nomor: e.target.value})}
+                  className="input"
+                  placeholder="Contoh: 1234567890"
                 />
               </div>
               <div>

@@ -61,6 +61,9 @@ function doGet(e) {
       case 'deleteKategori':
         result = deleteKategori(e.parameter.id);
         break;
+      case 'updateKategori':
+        result = updateKategori(JSON.parse(e.parameter.data));
+        break;
       case 'importTransaksi':
         result = importTransaksi(e.parameter.tsvData);
         break;
@@ -223,6 +226,22 @@ function addKategori(data) {
   sheet.appendRow([id, data.nama, data.tipe, new Date()]);
   
   return { success: true, message: 'Kategori berhasil ditambahkan' };
+}
+
+function updateKategori(data) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('Kategori');
+  const dataRange = sheet.getDataRange().getValues();
+  
+  for (let i = 1; i < dataRange.length; i++) {
+    if (dataRange[i][0] === data.id) {
+      sheet.getRange(i + 1, 2).setValue(data.nama);
+      sheet.getRange(i + 1, 3).setValue(data.tipe);
+      return { success: true, message: 'Kategori berhasil diupdate' };
+    }
+  }
+  
+  return { success: false, message: 'Kategori tidak ditemukan' };
 }
 
 function deleteKategori(id) {

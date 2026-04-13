@@ -23,6 +23,7 @@ export interface Kategori {
 export interface Rekening {
   id: string;
   nama: string;
+  nomor: string;
   saldo: number;
   jenis: 'Bank' | 'Kas';
 }
@@ -119,11 +120,20 @@ class ApiService {
       case 'getRekening':
         return { 
           success: true, 
-          data: [
-            { id: '1', nama: 'Bank BCA', saldo: 10000000, jenis: 'Bank' },
-            { id: '2', nama: 'Bank Mandiri', saldo: 5000000, jenis: 'Bank' },
-            { id: '3', nama: 'Kas Tangan', saldo: 5000000, jenis: 'Kas' },
-          ]
+          data: []
+        };
+      case 'getDashboard':
+        return { 
+          success: true, 
+          data: {
+            totalPemasukan: 20000000,
+            totalPengeluaran: 0,
+            saldoKas: 0,
+            labaRugi: 20000000,
+            totalTransaksi: 1,
+            rekening: [],
+            recentTransactions: mockTransactions
+          }
         };
       default:
         return { success: false, message: 'Unknown action' };
@@ -166,6 +176,12 @@ class ApiService {
     });
   }
 
+  async updateKategori(data: { id: string; nama: string; tipe: string }) {
+    return this.fetchApi<{ success: boolean; message: string }>('updateKategori', {
+      data: JSON.stringify(data)
+    });
+  }
+
   async deleteKategori(id: string) {
     return this.fetchApi<{ success: boolean; message: string }>('deleteKategori', { id });
   }
@@ -175,13 +191,13 @@ class ApiService {
     return this.fetchApi<{ success: boolean; data: Rekening[] }>('getRekening');
   }
 
-  async updateRekening(data: { id: string; saldo: number }) {
+  async updateRekening(data: { id: string; saldo: number; nama?: string; nomor?: string }) {
     return this.fetchApi<{ success: boolean; message: string }>('updateRekening', {
       data: JSON.stringify(data)
     });
   }
 
-  async addRekening(data: { nama: string; saldo: number; jenis: string }) {
+  async addRekening(data: { nama: string; nomor: string; saldo: number; jenis: string }) {
     return this.fetchApi<{ success: boolean; message: string }>('addRekening', {
       data: JSON.stringify(data)
     });

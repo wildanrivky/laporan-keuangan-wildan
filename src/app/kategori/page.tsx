@@ -58,7 +58,11 @@ export default function KategoriPage() {
     const apiTipe = formData.tipe === 'debit' ? 'pemasukan' : 'pengeluaran';
     
     try {
-      await api.addKategori({ nama: formData.nama, tipe: apiTipe });
+      if (editId) {
+        await api.updateKategori({ id: editId, nama: formData.nama, tipe: apiTipe });
+      } else {
+        await api.addKategori({ nama: formData.nama, tipe: apiTipe });
+      }
       const result = await api.getKategori();
       if (result.success && result.data) {
         setKategori(result.data.map((k: any) => ({
@@ -68,10 +72,20 @@ export default function KategoriPage() {
         })));
       }
       setShowModal(false);
+      setEditId(null);
       setFormData(resetForm());
     } catch (err: any) {
       alert('Gagal menyimpan kategori: ' + err.message);
     }
+  };
+
+  const handleEdit = (k: Kategori) => {
+    setFormData({
+      nama: k.nama,
+      tipe: k.tipe,
+    });
+    setEditId(k.id);
+    setShowModal(true);
   };
 
   const handleDelete = async (id: string) => {
@@ -127,9 +141,14 @@ export default function KategoriPage() {
                   kategoriDebit.map((k) => (
                     <div key={k.id} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg">
                       <span className="text-sm text-slate-700">{k.nama}</span>
-                      <button onClick={() => handleDelete(k.id)} className="p-1 text-slate-400 hover:text-red-600">
-                        <Trash2 size={14} />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => handleEdit(k)} className="p-1 text-slate-400 hover:text-emerald-600">
+                          <Edit2 size={14} />
+                        </button>
+                        <button onClick={() => handleDelete(k.id)} className="p-1 text-slate-400 hover:text-red-600">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
@@ -150,9 +169,14 @@ export default function KategoriPage() {
                   kategoriCredit.map((k) => (
                     <div key={k.id} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg">
                       <span className="text-sm text-slate-700">{k.nama}</span>
-                      <button onClick={() => handleDelete(k.id)} className="p-1 text-slate-400 hover:text-red-600">
-                        <Trash2 size={14} />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => handleEdit(k)} className="p-1 text-slate-400 hover:text-emerald-600">
+                          <Edit2 size={14} />
+                        </button>
+                        <button onClick={() => handleDelete(k.id)} className="p-1 text-slate-400 hover:text-red-600">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
