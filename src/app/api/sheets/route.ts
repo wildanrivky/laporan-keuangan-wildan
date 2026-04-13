@@ -26,6 +26,8 @@ async function getSheet(name: string) {
   
   const correctHeaders = name === 'Rekening' 
     ? ['id', 'nama', 'nomor', 'saldo', 'jenis']
+    : name === 'Transaksi'
+    ? ['id', 'tanggal', 'deskripsi', 'kategori', 'jumlah', 'tipe']
     : ['id', 'nama', 'tipe'];
   
   // Always check and fix headers
@@ -95,6 +97,65 @@ async function getSheet(name: string) {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const table = searchParams.get('table') || 'Rekening';
+  const action = searchParams.get('action');
+  
+  // Dashboard action
+  if (action === 'dashboard') {
+    try {
+      const { sheets } = await getSheet('Transaksi');
+      
+      const transResult = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Transaksi!A:Z',
+      });
+      
+      const rekeningResult = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Rekening!A:Z',
+      });
+      
+      const transRows = transResult.data.values || [];
+      const rekRows = rekeningResult.data.values || [];
+      
+      const rekening = rekRows.slice(1).map(row => ({
+        id: row[0] || '',
+        nama: row[1] || '',
+        nomor: row[2] || '',
+        saldo: parseInt(row[3]) || 0,
+        jenis: row[4] || 'Bank',
+      }));
+      
+      const totalSaldoRekening = rekening.reduce((acc, r) => acc + r.saldo, 0);
+      
+      const transactions = transRows.slice(1).map(row => ({
+        id: row[0] || '',
+        tanggal: row[1] || '',
+        deskripsi: row[2] || '',
+        kategori: row[3] || '',
+        jumlah: parseInt(row[4]) || 0,
+        tipe: row[5] || 'debit',
+      }));
+      
+      const totalPemasukan = transactions.filter(t => t.tipe === 'debit').reduce((acc, t) => acc + t.jumlah, 0);
+      const totalPengeluaran = transactions.filter(t => t.tipe === 'credit').reduce((acc, t) => acc + t.jumlah, 0);
+      
+      return NextResponse.json({
+        success: true,
+        data: {
+          totalPemasukan,
+          totalPengeluaran,
+          saldoKas: totalSaldoRekening,
+          labaRugi: totalPemasukan - totalPengeluaran,
+          totalTransaksi: transactions.length,
+          rekening,
+          recentTransactions: transactions.slice(0, 10),
+        }
+      });
+    } catch (error: any) {
+      console.error('Dashboard GET Error:', error.message);
+      return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    }
+  }
   
   try {
     const { sheets } = await getSheet(table);
@@ -143,6 +204,8 @@ export async function POST(request: Request) {
     const headers = result.data.values?.[0] || [];
     const correctHeaders = table === 'Rekening' 
       ? ['id', 'nama', 'nomor', 'saldo', 'jenis']
+      : table === 'Transaksi'
+      ? ['id', 'tanggal', 'deskripsi', 'kategori', 'jumlah', 'tipe']
       : ['id', 'nama', 'tipe'];
     
     // Ensure headers are correct
@@ -205,6 +268,8 @@ export async function PUT(request: Request) {
     // Define correct headers
     const correctHeaders = table === 'Rekening' 
       ? ['id', 'nama', 'nomor', 'saldo', 'jenis']
+      : table === 'Transaksi'
+      ? ['id', 'tanggal', 'deskripsi', 'kategori', 'jumlah', 'tipe']
       : ['id', 'nama', 'tipe'];
     
     const idIndex = headers.indexOf('id');
