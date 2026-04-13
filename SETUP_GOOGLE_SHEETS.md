@@ -24,18 +24,22 @@ Buka: https://console.cloud.google.com/
 7. Klik **DONE**
 
 ## Langkah 5: Buat JSON Key
-1. Klik pada service account yang baru dibuat (nama yang刚才 buat)
+1. Klik pada service account yang baru dibuat (nama: `sheets-api`)
 2. Klik tab **Keys**
-3. Klik **ADD KEY** → **Create new key**
+3. Jika ada key yang sudah ada, klik **ADD KEY** → **Create new key**
 4. Pilih **JSON** → **Create**
 5. File akan otomatis didownload (simpan baik-baik!)
+
+**Jika tidak ada tombol ADD KEY:**
+- Pastikan Anda sudah klik pada nama service account (bukan di list)
+- Coba klik tombol **+ Add Key** yang biasanya ada di tengah atau atas tab
 
 ## Langkah 6: Share Spreadsheet
 1. Buka: https://docs.google.com/spreadsheets/d/1ip9jldvaDt1da2wNyqqrZpIlujByg_YAj_vl_SfWEUI
 2. Klik **Share** (kanan atas)
 3. Di "Add people and groups", masukkan email service account:
    ```
-   sheets-api@laporan-keuangan-ukm.iam.gserviceaccount.com
+   sheets-api@crypto-moon-465120-a8.iam.gserviceaccount.com
    ```
 4. Pastikan permission **Editor**
 5. Klik **Done**
