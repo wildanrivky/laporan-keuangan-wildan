@@ -18,9 +18,10 @@ import {
   X
 } from 'lucide-react';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 const navItems = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/home', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/buku-kas', label: 'Buku Kas', icon: BookOpen },
   { href: '/laba-rugi', label: 'Laba Rugi', icon: TrendingUp },
   { href: '/neraca', label: 'Neraca', icon: FileText },
@@ -29,15 +30,17 @@ const navItems = [
   { href: '/laporan', label: 'Laporan', icon: PieChart },
 ];
 
-const bottomNavItems = [
-  { href: '/login', label: 'Login', icon: LogIn },
-  { href: '/kategori', label: 'Kategori', icon: Tag },
-  { href: '/pengaturan', label: 'Pengaturan', icon: Settings },
-];
-
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+
+  const handleLogout = () => {
+    document.cookie = 'isLoggedIn=; path=/; max-age=0';
+    localStorage.removeItem('isLoggedIn');
+    localStorage.removeItem('adminUser');
+    router.push('/');
+  };
 
   return (
     <>
@@ -78,24 +81,35 @@ export default function Sidebar() {
         </nav>
 
         <div className="p-4 border-t border-slate-800 space-y-1">
-          {bottomNavItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                  isActive 
-                    ? 'bg-emerald-600 text-white' 
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                }`}
-              >
-                <Icon size={20} />
-                <span className="font-medium">{item.label}</span>
-              </Link>
-            );
-          })}
+          <Link
+            href="/kategori"
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+              pathname === '/kategori' 
+                ? 'bg-emerald-600 text-white' 
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <Tag size={20} />
+            <span className="font-medium">Kategori</span>
+          </Link>
+          <Link
+            href="/pengaturan"
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+              pathname === '/pengaturan' 
+                ? 'bg-emerald-600 text-white' 
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <Settings size={20} />
+            <span className="font-medium">Pengaturan</span>
+          </Link>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors w-full text-left text-red-400 hover:bg-red-900/30 hover:text-red-300"
+          >
+            <LogIn size={20} className="rotate-180" />
+            <span className="font-medium">Logout</span>
+          </button>
         </div>
       </aside>
 
@@ -142,25 +156,37 @@ export default function Sidebar() {
         </nav>
 
         <div className="p-4 border-t border-slate-800 space-y-1">
-          {bottomNavItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setIsOpen(false)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                  isActive 
-                    ? 'bg-emerald-600 text-white' 
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                }`}
-              >
-                <Icon size={20} />
-                <span className="font-medium">{item.label}</span>
-              </Link>
-            );
-          })}
+          <Link
+            href="/kategori"
+            onClick={() => setIsOpen(false)}
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+              pathname === '/kategori' 
+                ? 'bg-emerald-600 text-white' 
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <Tag size={20} />
+            <span className="font-medium">Kategori</span>
+          </Link>
+          <Link
+            href="/pengaturan"
+            onClick={() => setIsOpen(false)}
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+              pathname === '/pengaturan' 
+                ? 'bg-emerald-600 text-white' 
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <Settings size={20} />
+            <span className="font-medium">Pengaturan</span>
+          </Link>
+          <button
+            onClick={() => { setIsOpen(false); handleLogout(); }}
+            className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors w-full text-left text-red-400 hover:bg-red-900/30 hover:text-red-300"
+          >
+            <LogIn size={20} className="rotate-180" />
+            <span className="font-medium">Logout</span>
+          </button>
         </div>
       </div>
     </>
