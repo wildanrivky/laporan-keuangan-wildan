@@ -64,6 +64,9 @@ function doGet(e) {
       case 'importTransaksi':
         result = importTransaksi(e.parameter.tsvData);
         break;
+      case 'clearTransaksi':
+        result = clearTransaksi();
+        break;
       default:
         result = { success: false, message: 'Action tidak ditemukan' };
     }
@@ -377,4 +380,20 @@ function importTransaksi(tsvData) {
   }
   
   return { success: true, message: `Berhasil import ${imported} transaksi` };
+}
+
+function clearTransaksi() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('Transaksi');
+  
+  if (!sheet) {
+    return { success: true, message: 'Sheet Transaksi tidak ada, tidak ada yang perlu dihapus' };
+  }
+  
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.deleteRows(2, lastRow - 1);
+  }
+  
+  return { success: true, message: 'Semua transaksi berhasil dihapus' };
 }

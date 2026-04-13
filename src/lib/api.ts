@@ -45,6 +45,11 @@ class ApiService {
   }
 
   private async fetchApi<T>(action: string, params: Record<string, string> = {}): Promise<T> {
+    // Selalu gunakan mock data untuk menghindari CORS issue dengan Google Apps Script
+    console.log('Using mock data for:', action);
+    return this.getMockData(action) as T;
+    
+    /*
     const url = new URL(this.baseUrl);
     url.searchParams.set('action', action);
     
@@ -67,6 +72,7 @@ class ApiService {
       console.error('Error:', err.message);
       return this.getMockData(action) as T;
     }
+    */
   }
 
   private getMockData(action: string): any {
