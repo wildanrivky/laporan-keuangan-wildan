@@ -205,8 +205,8 @@ export async function DELETE(request: Request) {
             range: {
               sheetId: 0,
               dimension: 'ROWS',
-              startRowIndex: rowIndex,
-              endRowIndex: rowIndex + 1
+              startIndex: rowIndex,
+              endIndex: rowIndex + 1
             }
           }
         }]

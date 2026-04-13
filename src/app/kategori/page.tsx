@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, ArrowUpRight, ArrowDownRight, X } from 'lucide-react';
+import { Plus, Trash2, Edit2, ArrowUpRight, ArrowDownRight, X, Loader2 } from 'lucide-react';
 
 type Kategori = {
   id: string;
@@ -9,7 +9,7 @@ type Kategori = {
   tipe: 'debit' | 'credit';
 };
 
-const STORAGE_KEY = 'kategori_data';
+const API_URL = '/api/sheets';
 
 const defaultKategori: Kategori[] = [
   { id: '1', nama: 'Pendapatan Jasa', tipe: 'debit' },
@@ -26,6 +26,8 @@ const defaultKategori: Kategori[] = [
 
 export default function KategoriPage() {
   const [kategori, setKategori] = useState<Kategori[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -38,21 +40,40 @@ export default function KategoriPage() {
     tipe: 'debit' as 'debit' | 'credit',
   });
 
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      setKategori(JSON.parse(saved));
-    } else {
+  const fetchKategori = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_URL}?table=Kategori`);
+      const result = await res.json();
+      
+      if (result.success && result.data && result.data.length > 0) {
+        setKategori(result.data.map((k: any) => ({
+          id: k.id || k.nama,
+          nama: k.nama || '',
+          tipe: k.tipe === 'pemasukan' ? 'debit' : (k.tipe === 'pengeluaran' ? 'credit' : 'debit'),
+        })));
+      } else {
+        // Initialize with default
+        for (const k of defaultKategori) {
+          await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ table: 'Kategori', data: k }),
+          });
+        }
+        setKategori(defaultKategori);
+      }
+    } catch (err) {
+      console.error('Error fetching kategori:', err);
       setKategori(defaultKategori);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultKategori));
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
-    if (kategori.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(kategori));
-    }
-  }, [kategori]);
+    fetchKategori();
+  }, []);
 
   const kategoriDebit = kategori.filter(k => k.tipe === 'debit');
   const kategoriCredit = kategori.filter(k => k.tipe === 'credit');
@@ -61,22 +82,36 @@ export default function KategoriPage() {
     e.preventDefault();
     
     try {
-      const newKategori: Kategori = {
+      setSaving(true);
+      const apiTipe = formData.tipe === 'debit' ? 'pemasukan' : 'pengeluaran';
+      const newKategori = {
         id: editId || Date.now().toString(),
         nama: formData.nama,
-        tipe: formData.tipe,
+        tipe: apiTipe,
       };
-      
+
       if (editId) {
-        setKategori(kategori.map(k => k.id === editId ? newKategori : k));
+        await fetch(API_URL, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ table: 'Kategori', data: newKategori, id: editId }),
+        });
       } else {
-        setKategori([...kategori, newKategori]);
+        await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ table: 'Kategori', data: newKategori }),
+        });
       }
+
+      await fetchKategori();
       setShowModal(false);
       setEditId(null);
       setFormData(resetForm());
     } catch (err: any) {
       alert('Gagal menyimpan kategori: ' + err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -92,9 +127,13 @@ export default function KategoriPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Yakin ingin menghapus kategori ini?')) return;
     try {
-      setKategori(kategori.filter(k => k.id !== id));
+      setSaving(true);
+      await fetch(`${API_URL}?table=Kategori&id=${id}`, { method: 'DELETE' });
+      await fetchKategori();
     } catch (err: any) {
       alert('Gagal menghapus kategori: ' + err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -111,63 +150,69 @@ export default function KategoriPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="card">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-              <ArrowUpRight size={12} />
-            </span>
-            <h2 className="text-lg font-semibold text-slate-900">Pemasukan</h2>
-          </div>
-          <div className="space-y-2">
-            {kategoriDebit.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-4">Tidak ada kategori</p>
-            ) : (
-              kategoriDebit.map((k) => (
-                <div key={k.id} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg">
-                  <span className="text-sm text-slate-700">{k.nama}</span>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => handleEdit(k)} className="p-1 text-slate-400 hover:text-emerald-600">
-                      <Edit2 size={14} />
-                    </button>
-                    <button onClick={() => handleDelete(k.id)} className="p-1 text-slate-400 hover:text-red-600">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="animate-spin text-emerald-600" size={32} />
         </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="card">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                <ArrowUpRight size={12} />
+              </span>
+              <h2 className="text-lg font-semibold text-slate-900">Pemasukan</h2>
+            </div>
+            <div className="space-y-2">
+              {kategoriDebit.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-4">Tidak ada kategori</p>
+              ) : (
+                kategoriDebit.map((k) => (
+                  <div key={k.id} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg">
+                    <span className="text-sm text-slate-700">{k.nama}</span>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => handleEdit(k)} className="p-1 text-slate-400 hover:text-emerald-600">
+                        <Edit2 size={14} />
+                      </button>
+                      <button onClick={() => handleDelete(k.id)} className="p-1 text-slate-400 hover:text-red-600">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
 
-        <div className="card">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
-              <ArrowDownRight size={12} />
-            </span>
-            <h2 className="text-lg font-semibold text-slate-900">Pengeluaran</h2>
-          </div>
-          <div className="space-y-2">
-            {kategoriCredit.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-4">Tidak ada kategori</p>
-            ) : (
-              kategoriCredit.map((k) => (
-                <div key={k.id} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg">
-                  <span className="text-sm text-slate-700">{k.nama}</span>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => handleEdit(k)} className="p-1 text-slate-400 hover:text-emerald-600">
-                      <Edit2 size={14} />
-                    </button>
-                    <button onClick={() => handleDelete(k.id)} className="p-1 text-slate-400 hover:text-red-600">
-                      <Trash2 size={14} />
-                    </button>
+          <div className="card">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                <ArrowDownRight size={12} />
+              </span>
+              <h2 className="text-lg font-semibold text-slate-900">Pengeluaran</h2>
+            </div>
+            <div className="space-y-2">
+              {kategoriCredit.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-4">Tidak ada kategori</p>
+              ) : (
+                kategoriCredit.map((k) => (
+                  <div key={k.id} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg">
+                    <span className="text-sm text-slate-700">{k.nama}</span>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => handleEdit(k)} className="p-1 text-slate-400 hover:text-emerald-600">
+                        <Edit2 size={14} />
+                      </button>
+                      <button onClick={() => handleDelete(k.id)} className="p-1 text-slate-400 hover:text-red-600">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))
-            )}
+                ))
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -224,11 +269,12 @@ export default function KategoriPage() {
                   type="button"
                   onClick={() => { setShowModal(false); setEditId(null); setFormData(resetForm()); }}
                   className="btn-secondary flex-1"
+                  disabled={saving}
                 >
                   Batal
                 </button>
-                <button type="submit" className="btn-primary flex-1">
-                  {editId ? 'Simpan' : 'Tambah'}
+                <button type="submit" className="btn-primary flex-1" disabled={saving}>
+                  {saving ? <Loader2 className="animate-spin inline" size={16} /> : (editId ? 'Simpan' : 'Tambah')}
                 </button>
               </div>
             </form>
