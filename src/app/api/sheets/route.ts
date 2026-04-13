@@ -371,14 +371,18 @@ export async function DELETE(request: Request) {
     });
     
     const rowIndex = rows.findIndex((row, i) => i > 0 && String(row[idIndex]) === String(id));
-    console.log('Found rowIndex for delete:', rowIndex);
+    console.log('Found rowIndex for delete:', rowIndex, 'id to match:', id);
     
     if (rowIndex === -1) {
+      console.log('DUMPING ALL ROW IDs FOR DEBUG:');
+      rows.slice(1).forEach((row, i) => {
+        console.log(`  Row ${i+1}: "${row[idIndex]}" (type: ${typeof row[idIndex]})`);
+      });
       return NextResponse.json({ success: false, message: `Data tidak ditemukan, id: ${id}` }, { status: 404 });
     }
     
     // Delete row - use actual sheetId and correct indices
-    await sheets.spreadsheets.batchUpdate({
+    const deleteResult = await sheets.spreadsheets.batchUpdate({
       spreadsheetId: SPREADSHEET_ID,
       requestBody: {
         requests: [{
@@ -393,6 +397,9 @@ export async function DELETE(request: Request) {
         }]
       }
     });
+    
+    console.log('Delete batch result:', JSON.stringify(deleteResult.data));
+    console.log('Delete SUCCESS - rowIndex:', rowIndex, 'sheetId:', sheetId);
     
     return NextResponse.json({ success: true, message: 'Data berhasil dihapus' });
   } catch (error: any) {

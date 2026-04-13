@@ -43,7 +43,9 @@ export default function KategoriPage() {
   const fetchKategori = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}?table=Kategori`);
+      const res = await fetch(`${API_URL}?table=Kategori`, {
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       const result = await res.json();
       
       if (result.success && result.data && result.data.length > 0) {
@@ -128,7 +130,19 @@ export default function KategoriPage() {
     if (!confirm('Yakin ingin menghapus kategori ini?')) return;
     try {
       setSaving(true);
-      await fetch(`${API_URL}?table=Kategori&id=${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_URL}?table=Kategori&id=${id}`, { 
+        method: 'DELETE',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      const result = await res.json();
+      console.log('Delete result:', result);
+      
+      if (!result.success) {
+        alert(result.message || 'Gagal menghapus');
+        return;
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
       await fetchKategori();
     } catch (err: any) {
       alert('Gagal menghapus kategori: ' + err.message);
