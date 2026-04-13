@@ -11,26 +11,12 @@ type Kategori = {
 
 const API_URL = '/api/sheets';
 
-const defaultKategori: Kategori[] = [
-  { id: '1', nama: 'Pendapatan Jasa', tipe: 'debit' },
-  { id: '2', nama: 'Pendapatan Produksi', tipe: 'debit' },
-  { id: '3', nama: 'Pendapatan Lain', tipe: 'debit' },
-  { id: '4', nama: 'Persediaan', tipe: 'credit' },
-  { id: '5', nama: 'Perlengkapan', tipe: 'credit' },
-  { id: '6', nama: 'Biaya Listrik', tipe: 'credit' },
-  { id: '7', nama: 'Biaya Internet', tipe: 'credit' },
-  { id: '8', nama: 'Biaya Sewa', tipe: 'credit' },
-  { id: '9', nama: 'Biaya Gaji', tipe: 'credit' },
-  { id: '10', nama: 'Biaya Transport', tipe: 'credit' },
-];
-
 export default function KategoriPage() {
   const [kategori, setKategori] = useState<Kategori[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [initialized, setInitialized] = useState(false);
   const [formData, setFormData] = useState({
     nama: '',
     tipe: 'debit' as 'debit' | 'credit',
@@ -55,23 +41,13 @@ export default function KategoriPage() {
           nama: k.nama || '',
           tipe: k.tipe === 'pemasukan' ? 'debit' : (k.tipe === 'pengeluaran' ? 'credit' : 'debit'),
         })));
-        setInitialized(true);
-      } else if (!initialized) {
-        // Initialize with default ONLY on first load when sheet is empty
-        for (const k of defaultKategori) {
-          await fetch(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ table: 'Kategori', data: k }),
-          });
-        }
-        setKategori(defaultKategori);
-        setInitialized(true);
+        
+      } else {
+        setKategori([]);
       }
     } catch (err) {
       console.error('Error fetching kategori:', err);
-      setKategori(defaultKategori);
-      setInitialized(true);
+      setKategori([]);
     } finally {
       setLoading(false);
     }
@@ -110,7 +86,7 @@ export default function KategoriPage() {
         });
       }
 
-      setInitialized(true);
+      
       await fetchKategori();
       setShowModal(false);
       setEditId(null);
@@ -135,7 +111,7 @@ export default function KategoriPage() {
     if (!confirm('Yakin ingin menghapus kategori ini?')) return;
     try {
       setSaving(true);
-      setInitialized(true);
+      
       const res = await fetch(`${API_URL}?table=Kategori&id=${id}`, { 
         method: 'DELETE',
         headers: { 'Cache-Control': 'no-cache' }
