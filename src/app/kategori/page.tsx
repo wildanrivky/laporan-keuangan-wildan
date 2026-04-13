@@ -30,6 +30,7 @@ export default function KategoriPage() {
   const [saving, setSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
   const [formData, setFormData] = useState({
     nama: '',
     tipe: 'debit' as 'debit' | 'credit',
@@ -54,8 +55,9 @@ export default function KategoriPage() {
           nama: k.nama || '',
           tipe: k.tipe === 'pemasukan' ? 'debit' : (k.tipe === 'pengeluaran' ? 'credit' : 'debit'),
         })));
-      } else {
-        // Initialize with default
+        setInitialized(true);
+      } else if (!initialized) {
+        // Initialize with default ONLY on first load when sheet is empty
         for (const k of defaultKategori) {
           await fetch(API_URL, {
             method: 'POST',
@@ -64,10 +66,12 @@ export default function KategoriPage() {
           });
         }
         setKategori(defaultKategori);
+        setInitialized(true);
       }
     } catch (err) {
       console.error('Error fetching kategori:', err);
       setKategori(defaultKategori);
+      setInitialized(true);
     } finally {
       setLoading(false);
     }
@@ -106,6 +110,7 @@ export default function KategoriPage() {
         });
       }
 
+      setInitialized(true);
       await fetchKategori();
       setShowModal(false);
       setEditId(null);
@@ -130,6 +135,7 @@ export default function KategoriPage() {
     if (!confirm('Yakin ingin menghapus kategori ini?')) return;
     try {
       setSaving(true);
+      setInitialized(true);
       const res = await fetch(`${API_URL}?table=Kategori&id=${id}`, { 
         method: 'DELETE',
         headers: { 'Cache-Control': 'no-cache' }
