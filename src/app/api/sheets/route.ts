@@ -177,6 +177,7 @@ export async function GET(request: Request) {
     });
     
     const rows = result.data.values || [];
+    console.log(`GET ${table}: rows.length=${rows.length}, firstRow=${JSON.stringify(rows[0])}`);
     
     if (rows.length === 0) {
       return NextResponse.json({ success: true, data: [] });
@@ -197,7 +198,13 @@ export async function GET(request: Request) {
       data = data.map(normalizeRekening);
     }
     
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true, data }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    });
   } catch (error: any) {
     console.error('GET Error:', error.message);
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
