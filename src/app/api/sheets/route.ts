@@ -43,7 +43,6 @@ export async function GET(request: Request) {
   const table = searchParams.get('table') || 'Rekening';
   
   try {
-    console.log('GET request for table:', table);
     const { sheets } = await getSheet(table);
     
     const result = await sheets.spreadsheets.values.get({
@@ -51,15 +50,34 @@ export async function GET(request: Request) {
       range: `${table}!A:Z`,
     });
     
-    const rows = result.data.values || [];
+    let rows = result.data.values || [];
+    
+    // Define correct headers
+    const correctHeaders = table === 'Rekening' 
+      ? ['id', 'nama', 'nomor', 'saldo', 'jenis']
+      : ['id', 'nama', 'tipe'];
+    
+    // Fix header if needed
+    if (rows.length === 0 || rows[0][0] !== 'id' || (table === 'Rekening' && rows[0].length < 5)) {
+      console.log('Initializing headers for', table);
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${table}!1:1`,
+        valueInputOption: 'RAW',
+        requestBody: { values: [correctHeaders] },
+      });
+      const newResult = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${table}!A:Z`,
+      });
+      rows = newResult.data.values || [];
+    }
+    
     if (rows.length === 0) {
       return NextResponse.json({ success: true, data: [] });
     }
     
     const headers = rows[0];
-    console.log('GET headers:', headers);
-    console.log('GET row count:', rows.length - 1);
-    
     const data = rows.slice(1).map(row => {
       const obj: any = {};
       headers.forEach((header, i) => {
@@ -83,27 +101,33 @@ export async function POST(request: Request) {
     
     const { sheets } = await getSheet(table);
     
-    // Check if header exists
+    // Get current header
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `${table}!1:1`,
     });
     
-    let headers = result.data.values?.[0] || [];
+    let currentHeaders = result.data.values?.[0] || [];
     
-    if (headers.length === 0) {
-      // Create headers in fixed order
-      headers = ['id', 'nama', 'nomor', 'saldo', 'jenis'];
+    // Define correct headers for each table
+    const correctHeaders = table === 'Rekening' 
+      ? ['id', 'nama', 'nomor', 'saldo', 'jenis']
+      : ['id', 'nama', 'tipe'];
+    
+    // Force create correct headers
+    if (currentHeaders.length === 0 || currentHeaders.join(',') !== correctHeaders.join(',')) {
+      console.log(`Creating headers for ${table}:`, correctHeaders);
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
         range: `${table}!1:1`,
         valueInputOption: 'RAW',
-        requestBody: { values: [headers] },
+        requestBody: { values: [correctHeaders] },
       });
+      currentHeaders = correctHeaders;
     }
     
     // Ensure values match header order
-    const values = headers.map(h => {
+    const values = currentHeaders.map(h => {
       const val = data[h];
       if (val === undefined || val === null) return '';
       if (typeof val === 'number') return val;
@@ -149,6 +173,11 @@ export async function PUT(request: Request) {
     const headers = rows[0];
     console.log('Headers:', headers);
     
+    // Define correct headers
+    const correctHeaders = table === 'Rekening' 
+      ? ['id', 'nama', 'nomor', 'saldo', 'jenis']
+      : ['id', 'nama', 'tipe'];
+    
     const idIndex = headers.indexOf('id');
     
     if (idIndex === -1) {
@@ -168,8 +197,8 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, message: `Data tidak ditemukan, id: ${id}` }, { status: 404 });
     }
     
-    // Update row - ensure all columns are in correct order
-    const newValues = headers.map(h => {
+    // Update row using correct headers
+    const newValues = correctHeaders.map(h => {
       const val = data[h];
       console.log(`Header ${h}: value=${val}`);
       if (val === undefined || val === null) return '';
