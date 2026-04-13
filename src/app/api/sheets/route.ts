@@ -22,6 +22,7 @@ async function getSheet(name: string) {
   const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
   
   let sheet = spreadsheet.data.sheets?.find(s => s.properties?.title === name);
+  let sheetId = sheet?.properties?.sheetId;
   
   if (!sheet) {
     const res = await sheets.spreadsheets.batchUpdate({
@@ -30,10 +31,10 @@ async function getSheet(name: string) {
         requests: [{ addSheet: { properties: { title: name } } }]
       }
     });
-    sheet = { properties: { sheetId: res.data.replies?.[0]?.addSheet?.properties?.sheetId, title: name } };
+    sheetId = res.data.replies?.[0]?.addSheet?.properties?.sheetId;
   }
   
-  return sheets;
+  return { sheets, sheetId };
 }
 
 // GET - Ambil data
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
   const table = searchParams.get('table') || 'Rekening';
   
   try {
-    const sheets = await getSheet(table);
+    const { sheets } = await getSheet(table);
     
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { table, data } = body;
     
-    const sheets = await getSheet(table);
+    const { sheets } = await getSheet(table);
     
     // Check if header exists
     const result = await sheets.spreadsheets.values.get({
@@ -126,7 +127,7 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const { table, data, id } = body;
     
-    const sheets = await getSheet(table);
+    const { sheets } = await getSheet(table);
     
     // Get all data
     const result = await sheets.spreadsheets.values.get({
@@ -186,7 +187,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, message: 'ID diperlukan' }, { status: 400 });
     }
     
-    const sheets = await getSheet(table);
+    const { sheets, sheetId } = await getSheet(table);
     
     // Get all data
     const result = await sheets.spreadsheets.values.get({
@@ -208,14 +209,14 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, message: 'Data tidak ditemukan' }, { status: 404 });
     }
     
-    // Delete row
+    // Delete row - use actual sheetId and correct indices
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId: SPREADSHEET_ID,
       requestBody: {
         requests: [{
           deleteDimension: {
             range: {
-              sheetId: 0,
+              sheetId: sheetId,
               dimension: 'ROWS',
               startIndex: rowIndex,
               endIndex: rowIndex + 1
