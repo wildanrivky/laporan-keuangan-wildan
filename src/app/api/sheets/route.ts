@@ -1,0 +1,221 @@
+import { NextResponse } from 'next/server';
+import { google } from 'googleapis';
+
+const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
+
+const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID || '1ip9jldvaDt1da2wNyqqrZpIlujByg_YAj_vl_SfWEUI';
+
+function getAuth() {
+  const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS || '{}');
+  
+  const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: SCOPES,
+  });
+  
+  return auth;
+}
+
+async function getSheet(name: string) {
+  const auth = await getAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+  
+  let sheet = spreadsheet.data.sheets?.find(s => s.properties?.title === name);
+  
+  if (!sheet) {
+    const res = await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: {
+        requests: [{ addSheet: { properties: { title: name } } }]
+      }
+    });
+    sheet = { properties: { sheetId: res.data.replies?.[0]?.addSheet?.properties?.sheetId, title: name } };
+  }
+  
+  return sheets;
+}
+
+// GET - Ambil data
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const table = searchParams.get('table') || 'Rekening';
+  
+  try {
+    const sheets = await getSheet(table);
+    
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${table}!A:Z`,
+    });
+    
+    const rows = result.data.values || [];
+    if (rows.length === 0) {
+      return NextResponse.json({ success: true, data: [] });
+    }
+    
+    const headers = rows[0];
+    const data = rows.slice(1).map(row => {
+      const obj: any = {};
+      headers.forEach((header, i) => {
+        obj[header] = row[i] || '';
+      });
+      return obj;
+    });
+    
+    return NextResponse.json({ success: true, data });
+  } catch (error: any) {
+    console.error('GET Error:', error.message);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+  }
+}
+
+// POST - Tambah data
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { table, data } = body;
+    
+    const sheets = await getSheet(table);
+    
+    // Check if header exists
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${table}!1:1`,
+    });
+    
+    let headers = result.data.values?.[0] || [];
+    const values = Object.values(data);
+    
+    if (headers.length === 0) {
+      // Create headers
+      headers = Object.keys(data);
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${table}!1:1`,
+        valueInputOption: 'RAW',
+        requestBody: { values: [headers] },
+      });
+    }
+    
+    // Append row
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${table}!A:Z`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [values] },
+    });
+    
+    return NextResponse.json({ success: true, message: 'Data berhasil ditambahkan' });
+  } catch (error: any) {
+    console.error('POST Error:', error.message);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+  }
+}
+
+// PUT - Update data
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    const { table, data, id } = body;
+    
+    const sheets = await getSheet(table);
+    
+    // Get all data
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${table}!A:Z`,
+    });
+    
+    const rows = result.data.values || [];
+    if (rows.length < 2) {
+      return NextResponse.json({ success: false, message: 'Data tidak ditemukan' }, { status: 404 });
+    }
+    
+    const headers = rows[0];
+    const idIndex = headers.indexOf('id');
+    
+    if (idIndex === -1) {
+      return NextResponse.json({ success: false, message: 'Kolom id tidak ditemukan' }, { status: 400 });
+    }
+    
+    // Find row
+    const rowIndex = rows.findIndex((row, i) => i > 0 && row[idIndex] === id);
+    
+    if (rowIndex === -1) {
+      return NextResponse.json({ success: false, message: 'Data tidak ditemukan' }, { status: 404 });
+    }
+    
+    // Update row
+    const newValues = headers.map((h, i) => data[h] ?? '');
+    
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${table}!${rowIndex + 1}:${rowIndex + 1}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [newValues] },
+    });
+    
+    return NextResponse.json({ success: true, message: 'Data berhasil diupdate' });
+  } catch (error: any) {
+    console.error('PUT Error:', error.message);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+  }
+}
+
+// DELETE - Hapus data
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const table = searchParams.get('table') || 'Rekening';
+    const id = searchParams.get('id');
+    
+    if (!id) {
+      return NextResponse.json({ success: false, message: 'ID diperlukan' }, { status: 400 });
+    }
+    
+    const sheets = await getSheet(table);
+    
+    // Get all data
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${table}!A:Z`,
+    });
+    
+    const rows = result.data.values || [];
+    const headers = rows[0];
+    const idIndex = headers.indexOf('id');
+    
+    if (idIndex === -1) {
+      return NextResponse.json({ success: false, message: 'Kolom id tidak ditemukan' }, { status: 400 });
+    }
+    
+    const rowIndex = rows.findIndex((row, i) => i > 0 && row[idIndex] === id);
+    
+    if (rowIndex === -1) {
+      return NextResponse.json({ success: false, message: 'Data tidak ditemukan' }, { status: 404 });
+    }
+    
+    // Delete row
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: {
+        requests: [{
+          deleteDimension: {
+            range: {
+              sheetId: 0,
+              dimension: 'ROWS',
+              startRowIndex: rowIndex,
+              endRowIndex: rowIndex + 1
+            }
+          }
+        }]
+      }
+    });
+    
+    return NextResponse.json({ success: true, message: 'Data berhasil dihapus' });
+  } catch (error: any) {
+    console.error('DELETE Error:', error.message);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+  }
+}
