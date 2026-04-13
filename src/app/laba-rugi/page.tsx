@@ -13,6 +13,7 @@ import {
   Legend
 } from 'recharts';
 import { api, formatRupiah } from '@/lib/api';
+import { buildAccountingSummary, buildPeriodSeries } from '@/lib/accounting';
 
 const PERIOD_TYPES = [
   { value: 'tanggal', label: 'Tanggal ke Tanggal' },
@@ -43,6 +44,11 @@ const TAHUN_OPTIONS = Array.from({ length: 10 }, (_, i) => {
   return { value: year.toString(), label: year.toString() };
 });
 
+const getMonthEndDate = (year: string, month: string) => {
+  const endDate = new Date(Number(year), Number(month), 0).getDate();
+  return `${year}-${month}-${String(endDate).padStart(2, '0')}`;
+};
+
 export default function LabaRugiPage() {
   const [periodeType, setPeriodeType] = useState('bulan');
   const [startYear, setStartYear] = useState(currentYear.toString());
@@ -62,50 +68,41 @@ export default function LabaRugiPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const result = await api.getTransaksi(startDate, endDate);
-        if (result.success && result.data) {
-          const transactions = result.data;
-          const pendapatan = transactions.filter((t: any) => t.tipe === 'debit').reduce((sum: number, t: any) => sum + t.jumlah, 0);
-          const pengeluaran = transactions.filter((t: any) => t.tipe === 'credit').reduce((sum: number, t: any) => sum + t.jumlah, 0);
-          
-          const groupedPendapatan: Record<string, number> = {};
-          const groupedPengeluaran: Record<string, number> = {};
-          
-          transactions.forEach((t: any) => {
-            if (t.tipe === 'debit') {
-              groupedPendapatan[t.kategori] = (groupedPendapatan[t.kategori] || 0) + t.jumlah;
-            } else {
-              groupedPengeluaran[t.kategori] = (groupedPengeluaran[t.kategori] || 0) + t.jumlah;
-            }
-          });
+        const effectiveStartDate =
+          periodeType === 'tanggal'
+            ? startDate
+            : periodeType === 'bulan'
+              ? `${startYear}-${startMonth}-01`
+              : `${startYear}-01-01`;
+        const effectiveEndDate =
+          periodeType === 'tanggal'
+            ? endDate
+            : periodeType === 'bulan'
+              ? getMonthEndDate(endYear, endMonth)
+              : `${endYear}-12-31`;
 
-          const chartData: any[] = [];
-          const start = new Date(startDate);
-          const end = new Date(endDate);
-          
-          if (periodeType === 'bulan') {
-            for (let y = parseInt(startYear); y <= parseInt(endYear); y++) {
-              const mStart = y === parseInt(startYear) ? parseInt(startMonth) : 1;
-              const mEnd = y === parseInt(endYear) ? parseInt(endMonth) : 12;
-              for (let m = mStart; m <= mEnd; m++) {
-                const monthTransactions = transactions.filter((t: any) => {
-                  const d = new Date(t.tanggal);
-                  return d.getFullYear() === y && d.getMonth() + 1 === m;
-                });
-                const p = monthTransactions.filter((t: any) => t.tipe === 'debit').reduce((sum: number, t: any) => sum + t.jumlah, 0);
-                const b = monthTransactions.filter((t: any) => t.tipe === 'credit').reduce((sum: number, t: any) => sum + t.jumlah, 0);
-                chartData.push({ bulan: `${BULAN_OPTIONS[m-1].label.substring(0,3)}`, pendapatan: p, biaya: b, laba: p - b });
-              }
-            }
-          }
+        const result = await api.getTransaksi(effectiveStartDate, effectiveEndDate);
+        if (result.success && result.data) {
+          const summary = buildAccountingSummary(result.data, []);
+          const chartSeries = buildPeriodSeries(
+            result.data,
+            periodeType as 'tanggal' | 'bulan' | 'tahun',
+            periodeType === 'tanggal' ? effectiveStartDate : periodeType === 'bulan' ? `${startYear}-${startMonth}` : startYear,
+            periodeType === 'tanggal' ? effectiveEndDate : periodeType === 'bulan' ? `${endYear}-${endMonth}` : endYear
+          );
 
           setReportData({
-            pendapatan: groupedPendapatan,
-            totalPendapatan: pendapatan,
-            biaya: groupedPengeluaran,
-            totalBiaya: pengeluaran,
-            chartData,
-            labaBersih: pendapatan - pengeluaran,
+            pendapatan: summary.labaRugi.pendapatan,
+            totalPendapatan: summary.labaRugi.totalPendapatan,
+            biaya: summary.labaRugi.biaya,
+            totalBiaya: summary.labaRugi.totalBiaya,
+            chartData: chartSeries.map((point) => ({
+              bulan: point.label,
+              pendapatan: point.pendapatan,
+              biaya: point.biaya,
+              laba: point.pendapatan - point.biaya,
+            })),
+            labaBersih: summary.labaRugi.labaBersih,
           });
         }
       } catch (err) {
@@ -114,10 +111,8 @@ export default function LabaRugiPage() {
         setLoading(false);
       }
     };
-    if (showPreview) {
-      fetchData();
-    }
-  }, [showPreview, startDate, endDate, startYear, endYear, startMonth, endMonth, periodeType]);
+    fetchData();
+  }, [startDate, endDate, startYear, endYear, startMonth, endMonth, periodeType]);
 
   const getPeriodeLabel = () => {
     if (periodeType === 'tanggal') {

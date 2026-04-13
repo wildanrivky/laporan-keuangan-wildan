@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { FileText, Download, Calendar, Eye, Loader2 } from 'lucide-react';
 import { api, formatRupiah } from '@/lib/api';
+import { buildAccountingSummary } from '@/lib/accounting';
 
 const laporanOptions = [
   { value: 'laba-rugi', label: 'Laporan Laba Rugi', description: 'Laporan keuntungan dan kerugian' },
@@ -45,6 +46,11 @@ const TAHUN_OPTIONS = Array.from({ length: 10 }, (_, i) => {
   return { value: year.toString(), label: year.toString() };
 });
 
+const getMonthEndDate = (year: string, month: string) => {
+  const endDate = new Date(Number(year), Number(month), 0).getDate();
+  return `${year}-${month}-${String(endDate).padStart(2, '0')}`;
+};
+
 export default function LaporanPage() {
   const [selectedLaporan, setSelectedLaporan] = useState('');
   const [selectedFormat, setSelectedFormat] = useState('pdf');
@@ -67,15 +73,27 @@ export default function LaporanPage() {
       const fetchData = async () => {
         setLoading(true);
         try {
-          const result = await api.getTransaksi(startDate, endDate);
-          if (result.success && result.data) {
-            const transactions = result.data;
-            const pendapatan = transactions.filter((t: any) => t.tipe === 'debit').reduce((sum: number, t: any) => sum + t.jumlah, 0);
-            const pengeluaran = transactions.filter((t: any) => t.tipe === 'credit').reduce((sum: number, t: any) => sum + t.jumlah, 0);
-            const rekeningResult = await api.getRekening();
-            const totalSaldo = rekeningResult.success && rekeningResult.data 
-              ? rekeningResult.data.reduce((sum: number, r: any) => sum + r.saldo, 0) 
-              : 0;
+          const effectiveStartDate =
+            periodeType === 'tanggal'
+              ? startDate
+              : periodeType === 'bulan'
+                ? `${startYear}-${startMonth}-01`
+                : `${startYear}-01-01`;
+          const effectiveEndDate =
+            periodeType === 'tanggal'
+              ? endDate
+              : periodeType === 'bulan'
+                ? getMonthEndDate(endYear, endMonth)
+                : `${endYear}-12-31`;
+
+          const [result, rekeningResult] = await Promise.all([
+            api.getTransaksi(effectiveStartDate, effectiveEndDate),
+            api.getRekening(),
+          ]);
+
+          if (result.success && result.data && rekeningResult.success && rekeningResult.data) {
+            const summary = buildAccountingSummary(result.data, rekeningResult.data);
+            setPreviewData({});
 
             if (selectedLaporan === 'laba-rugi' || selectedLaporan === 'semua') {
               setPreviewData((prev: any) => ({
@@ -84,9 +102,9 @@ export default function LaporanPage() {
                   title: 'Laporan Laba Rugi',
                   headers: ['No', 'Keterangan', 'Jumlah'],
                   rows: [
-                    { items: ['1', 'Total Pendapatan', formatRupiah(pendapatan), 'bold'] },
-                    { items: ['2', 'Total Pengeluaran', formatRupiah(pengeluaran), 'bold'] },
-                    { items: ['', 'Laba/Rugi Bersih', formatRupiah(pendapatan - pengeluaran), 'bold'] },
+                    { items: ['1', 'Total Pendapatan', formatRupiah(summary.labaRugi.totalPendapatan)], bold: true },
+                    { items: ['2', 'Total Biaya', formatRupiah(summary.labaRugi.totalBiaya)], bold: true },
+                    { items: ['', 'Laba/Rugi Bersih', formatRupiah(summary.labaRugi.labaBersih)], bold: true },
                   ],
                 },
               }));
@@ -98,12 +116,16 @@ export default function LaporanPage() {
                   title: 'Laporan Neraca',
                   headers: ['No', 'Keterangan', 'Jumlah'],
                   rows: [
-                    { items: ['A', 'AKTIVA', '', 'bold'] },
-                    { items: ['1', 'Kas & Bank', formatRupiah(totalSaldo), 'bold'] },
-                    { items: ['', 'Total Aktiva', formatRupiah(totalSaldo), 'bold'] },
-                    { items: ['B', 'PASSIVA', '', 'bold'] },
-                    { items: ['1', 'Modal', formatRupiah(pendapatan - pengeluaran), 'bold'] },
-                    { items: ['', 'Total Passiva', formatRupiah(totalSaldo), 'bold'] },
+                    { items: ['A', 'ASET', ''], bold: true },
+                    { items: ['1', 'Kas Buku', formatRupiah(summary.neraca.aset.kas)] },
+                    ...Object.entries(summary.neraca.aset.asetLain).map(([label, value], index) => ({
+                      items: [String(index + 2), label, formatRupiah(Number(value) || 0)],
+                    })),
+                    { items: ['', 'Total Aset', formatRupiah(summary.neraca.aset.totalAset)], bold: true },
+                    { items: ['B', 'EKUITAS', ''], bold: true },
+                    { items: ['1', 'Modal / Saldo Awal', formatRupiah(summary.neraca.ekuitas.modalSaldoAwal)] },
+                    { items: ['2', 'Laba Berjalan', formatRupiah(summary.neraca.ekuitas.labaBerjalan)] },
+                    { items: ['', 'Total Ekuitas', formatRupiah(summary.neraca.ekuitas.totalEkuitas)], bold: true },
                   ],
                 },
               }));
@@ -115,11 +137,12 @@ export default function LaporanPage() {
                   title: 'Laporan Arus Kas',
                   headers: ['No', 'Keterangan', 'Jumlah'],
                   rows: [
-                    { items: ['A', 'ARUS KAS DARI AKTIVITAS OPERASI', '', 'bold'] },
-                    { items: ['1', 'Penerimaan', formatRupiah(pendapatan)] },
-                    { items: ['2', 'Pengeluaran', formatRupiah(pengeluaran) ]},
-                    { items: ['', 'Kas Neto dari Operasi', formatRupiah(pendapatan - pengeluaran), 'bold'] },
-                    { items: ['', 'Kenaikan Kas Neto', formatRupiah(pendapatan - pengeluaran), 'bold'] },
+                    { items: ['A', 'ARUS KAS DARI AKTIVITAS OPERASI', ''], bold: true },
+                    { items: ['1', 'Kas Masuk Operasi', formatRupiah(summary.arusKas.kasMasukOperasi)] },
+                    { items: ['2', 'Kas Keluar Operasi', formatRupiah(summary.arusKas.kasKeluarOperasi)] },
+                    { items: ['B', 'ARUS KAS DARI INVESTASI', ''], bold: true },
+                    { items: ['3', 'Pembelian Aset', formatRupiah(summary.arusKas.kasKeluarInvestasi)] },
+                    { items: ['', 'Kenaikan Kas Neto', formatRupiah(summary.arusKas.kenaikanKasBersih)], bold: true },
                   ],
                 },
               }));
@@ -133,7 +156,7 @@ export default function LaporanPage() {
       };
       fetchData();
     }
-  }, [showPreview, selectedLaporan, startDate, endDate]);
+  }, [showPreview, selectedLaporan, startDate, endDate, startYear, endYear, startMonth, endMonth, periodeType]);
 
   const getPeriodeLabel = () => {
     if (periodeType === 'tanggal') {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { CheckCircle, AlertTriangle, Wallet, Building, PiggyBank, Plus, Edit2, Trash2, X, Loader2 } from 'lucide-react';
-import { formatRupiah } from '@/lib/api';
+import { api, formatRupiah } from '@/lib/api';
 
 type Rekening = {
   id: string;
@@ -39,8 +39,7 @@ export default function CekRekeningPage() {
   const fetchRekening = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}?table=Rekening`);
-      const result = await res.json();
+      const result = await api.getRekening();
       if (result.success && result.data) {
         setRekening(result.data.map((r: any) => ({
           id: r.id || r.nama,
@@ -60,8 +59,7 @@ export default function CekRekeningPage() {
   const refreshSaldoKas = async () => {
     try {
       setLoadingSaldo(true);
-      const res = await fetch('/api/sheets?action=dashboard');
-      const result = await res.json();
+      const result = await api.getDashboard();
       if (result.success && result.data) {
         setSaldoKas(result.data.saldoKas || 0);
       }
@@ -78,12 +76,11 @@ export default function CekRekeningPage() {
         setLoading(true);
         setLoadingSaldo(true);
         
-        const [rekRes, dashRes] = await Promise.all([
-          fetch(`${API_URL}?table=Rekening`),
-          fetch('/api/sheets?action=dashboard'),
+        const [rekResult, dashResult] = await Promise.all([
+          api.getRekening(),
+          api.getDashboard(),
         ]);
         
-        const rekResult = await rekRes.json();
         if (rekResult.success && rekResult.data) {
           setRekening(rekResult.data.map((r: any) => ({
             id: r.id || r.nama,
@@ -94,7 +91,6 @@ export default function CekRekeningPage() {
           })));
         }
         
-        const dashResult = await dashRes.json();
         if (dashResult.success && dashResult.data) {
           setSaldoKas(dashResult.data.saldoKas || 0);
         }
@@ -109,7 +105,7 @@ export default function CekRekeningPage() {
   }, []);
 
   const totalSaldoRekening = rekening.reduce((acc, r) => acc + r.saldo, 0);
-  const selisih = saldoKas - totalSaldoRekening;
+  const selisih = totalSaldoRekening - saldoKas;
   const isMatch = selisih === 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -203,7 +199,7 @@ export default function CekRekeningPage() {
           <div className={`card ${isMatch ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600">Saldo di Laporan Keuangan</p>
+                <p className="text-sm text-slate-600">Saldo Buku Kas</p>
                 <p className="text-2xl font-bold text-slate-900 mt-1">
                   {loadingSaldo ? '...' : formatRupiah(saldoKas)}
                 </p>
@@ -221,7 +217,7 @@ export default function CekRekeningPage() {
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-sm text-slate-600">Total Saldo Rekening</p>
+                <p className="text-sm text-slate-600">Saldo Aktual Rekening</p>
                 <p className="text-2xl font-bold text-slate-900 mt-1">{formatRupiah(totalSaldoRekening)}</p>
               </div>
             </div>

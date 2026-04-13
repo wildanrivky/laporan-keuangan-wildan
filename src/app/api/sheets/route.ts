@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
+import {
+  buildAccountingSummary,
+  filterTransactionsByDateRange,
+  normalizeRekening,
+  normalizeTransaction,
+} from '@/lib/accounting';
 
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 
@@ -98,6 +104,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const table = searchParams.get('table') || 'Rekening';
   const action = searchParams.get('action');
+  const startDate = searchParams.get('startDate') || undefined;
+  const endDate = searchParams.get('endDate') || undefined;
   
   // Dashboard action
   if (action === 'dashboard') {
@@ -121,34 +129,37 @@ export async function GET(request: Request) {
         id: row[0] || '',
         nama: row[1] || '',
         nomor: row[2] || '',
-        saldo: parseInt(row[3]) || 0,
+        saldo: row[3] || 0,
         jenis: row[4] || 'Bank',
       }));
-      
-      const totalSaldoRekening = rekening.reduce((acc, r) => acc + r.saldo, 0);
-      
+
       const transactions = transRows.slice(1).map(row => ({
         id: row[0] || '',
         tanggal: row[1] || '',
         deskripsi: row[2] || '',
         kategori: row[3] || '',
-        jumlah: parseInt(row[4]) || 0,
+        jumlah: row[4] || 0,
         tipe: row[5] || 'debit',
       }));
-      
-      const totalPemasukan = transactions.filter(t => t.tipe === 'debit').reduce((acc, t) => acc + t.jumlah, 0);
-      const totalPengeluaran = transactions.filter(t => t.tipe === 'credit').reduce((acc, t) => acc + t.jumlah, 0);
+      const summary = buildAccountingSummary(transactions, rekening);
       
       return NextResponse.json({
         success: true,
         data: {
-          totalPemasukan,
-          totalPengeluaran,
-          saldoKas: totalSaldoRekening,
-          labaRugi: totalPemasukan - totalPengeluaran,
-          totalTransaksi: transactions.length,
-          rekening,
-          recentTransactions: transactions.slice(0, 10),
+          totalPemasukan: summary.totalPemasukan,
+          totalPengeluaran: summary.totalPengeluaran,
+          totalBiaya: summary.totalBiaya,
+          saldoKas: summary.saldoBukuKas,
+          saldoRekening: summary.totalSaldoRekening,
+          selisihRekening: summary.selisihKas,
+          labaRugi: summary.labaRugi.labaBersih,
+          totalTransaksi: summary.transactions.length,
+          rekening: summary.rekening,
+          transactions: summary.transactions,
+          recentTransactions: summary.recentTransactions,
+          labaRugiDetail: summary.labaRugi,
+          arusKas: summary.arusKas,
+          neraca: summary.neraca,
         }
       });
     } catch (error: any) {
@@ -172,13 +183,19 @@ export async function GET(request: Request) {
     }
     
     const headers = rows[0];
-    const data = rows.slice(1).map(row => {
+    let data = rows.slice(1).map(row => {
       const obj: any = {};
       headers.forEach((header, i) => {
         obj[header] = row[i] || '';
       });
       return obj;
     });
+
+    if (table === 'Transaksi') {
+      data = filterTransactionsByDateRange(data.map(normalizeTransaction), startDate, endDate);
+    } else if (table === 'Rekening') {
+      data = data.map(normalizeRekening);
+    }
     
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
@@ -192,6 +209,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { table, data } = body;
+    const recordId = String(data?.id || Date.now().toString());
     
     const { sheets } = await getSheet(table);
     
@@ -220,7 +238,7 @@ export async function POST(request: Request) {
     
     // Map values to headers
     const values = correctHeaders.map(h => {
-      const val = data[h];
+      const val = h === 'id' ? recordId : data[h];
       if (val === undefined || val === null) return '';
       if (typeof val === 'number') return val;
       return String(val);
@@ -234,7 +252,7 @@ export async function POST(request: Request) {
       requestBody: { values: [values] },
     });
     
-    return NextResponse.json({ success: true, message: 'Data berhasil ditambahkan' });
+    return NextResponse.json({ success: true, message: 'Data berhasil ditambahkan', id: recordId });
   } catch (error: any) {
     console.error('POST Error:', error.message);
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
@@ -292,8 +310,10 @@ export async function PUT(request: Request) {
     }
     
     // Update row using correct headers
+    const existingRow = rows[rowIndex] || [];
+    const existingData = Object.fromEntries(headers.map((header, index) => [header, existingRow[index] || '']));
     const newValues = correctHeaders.map(h => {
-      const val = data[h];
+      const val = h === 'id' ? id : data[h] ?? existingData[h];
       console.log(`Header ${h}: value=${val}`);
       if (val === undefined || val === null) return '';
       if (typeof val === 'number') return val;

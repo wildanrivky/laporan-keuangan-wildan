@@ -29,6 +29,7 @@ import {
   Cell
 } from 'recharts';
 import { api, formatRupiah, formatDate } from '@/lib/api';
+import { buildPeriodSeries, type PeriodSeriesPoint } from '@/lib/accounting';
 
 const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#6366f1'];
 
@@ -55,7 +56,6 @@ const BULAN_OPTIONS = [
 
 const currentYear = new Date().getFullYear();
 const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
-const currentDay = new Date().getDate().toString().padStart(2, '0');
 
 const TAHUN_OPTIONS = Array.from({ length: 10 }, (_, i) => {
   const year = new Date().getFullYear() - 5 + i;
@@ -67,94 +67,6 @@ const getDefaultDate = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 };
 
-const getDefaultMonth = () => {
-  return `${currentYear}-${currentMonth}`;
-};
-
-const generateChartData = (startDate: string, endDate: string, type: string, transactions?: any[]) => {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
-  const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-  
-  if (!transactions || transactions.length === 0) {
-    return [];
-  }
-  
-  const data = [];
-  
-  if (type === 'tanggal') {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    let current = new Date(start);
-    
-    while (current <= end) {
-      const dayTransactions = transactions.filter((t: any) => {
-        const tDate = new Date(t.tanggal);
-        return tDate.toDateString() === current.toDateString();
-      });
-      
-      const pendapatan = dayTransactions.filter((t: any) => t.tipe === 'debit').reduce((sum: number, t: any) => sum + t.jumlah, 0);
-      const pengeluaran = dayTransactions.filter((t: any) => t.tipe === 'credit').reduce((sum: number, t: any) => sum + t.jumlah, 0);
-      
-      if (pendapatan > 0 || pengeluaran > 0) {
-        data.push({
-          label: `${current.getDate()} ${months[current.getMonth()]}`,
-          pendapatan,
-          pengeluaran,
-        });
-      }
-      current.setDate(current.getDate() + 1);
-    }
-  } else if (type === 'bulan') {
-    const [startYearStr, startMonthStr] = startDate.split('-');
-    const [endYearStr, endMonthStr] = endDate.split('-');
-    const startYear = parseInt(startYearStr);
-    const endYear = parseInt(endYearStr);
-    const startMonth = parseInt(startMonthStr);
-    const endMonth = parseInt(endMonthStr);
-    
-    for (let year = startYear; year <= endYear; year++) {
-      const monthStart = year === startYear ? startMonth : 1;
-      const monthEnd = year === endYear ? endMonth : 12;
-      
-      for (let month = monthStart; month <= monthEnd; month++) {
-        const monthTransactions = transactions.filter((t: any) => {
-          const tDate = new Date(t.tanggal);
-          return tDate.getFullYear() === year && tDate.getMonth() + 1 === month;
-        });
-        
-        const pendapatan = monthTransactions.filter((t: any) => t.tipe === 'debit').reduce((sum: number, t: any) => sum + t.jumlah, 0);
-        const pengeluaran = monthTransactions.filter((t: any) => t.tipe === 'credit').reduce((sum: number, t: any) => sum + t.jumlah, 0);
-        
-        if (pendapatan > 0 || pengeluaran > 0) {
-          data.push({
-            label: `${monthNames[month - 1]} ${year}`,
-            pendapatan,
-            pengeluaran,
-          });
-        }
-      }
-    }
-  } else {
-    const start = parseInt(startDate);
-    const end = parseInt(endDate);
-    for (let year = start; year <= end; year++) {
-      const yearTransactions = transactions.filter((t: any) => new Date(t.tanggal).getFullYear() === year);
-      
-      const pendapatan = yearTransactions.filter((t: any) => t.tipe === 'debit').reduce((sum: number, t: any) => sum + t.jumlah, 0);
-      const pengeluaran = yearTransactions.filter((t: any) => t.tipe === 'credit').reduce((sum: number, t: any) => sum + t.jumlah, 0);
-      
-      if (pendapatan > 0 || pengeluaran > 0) {
-        data.push({
-          label: year.toString(),
-          pendapatan,
-          pengeluaran,
-        });
-      }
-    }
-  }
-  return data;
-};
-
 export default function Dashboard() {
   const [currentDate, setCurrentDate] = useState('');
   const [formattedData, setFormattedData] = useState({
@@ -164,7 +76,7 @@ export default function Dashboard() {
     totalPendapatan: '',
     totalPengeluaran: '',
     transactions: [] as {id: string; deskripsi: string; jumlah: string; tipe: string; tanggal: string; kategori: string}[],
-    rekening: [] as {nama: string; saldo: string}[],
+    rekening: [] as {nama: string; saldo: string; jenis: string}[],
   });
   const [targetBulanan, setTargetBulanan] = useState('Rp 0');
   const [targetTahunan, setTargetTahunan] = useState('Rp 0');
@@ -180,11 +92,11 @@ export default function Dashboard() {
   const [endMonth, setEndMonth] = useState(currentMonth);
   const [startDate, setStartDate] = useState(getDefaultDate());
   const [endDate, setEndDate] = useState(getDefaultDate());
-  const [chartData, setChartData] = useState<{label: string; pendapatan: number; pengeluaran: number}[]>([]);
+  const [chartData, setChartData] = useState<PeriodSeriesPoint[]>([]);
   
   const [totalSaldoRekening, setTotalSaldoRekening] = useState(0);
   const saldoKasValue = dashboardData?.saldoKas || 0;
-  const selisih = saldoKasValue - totalSaldoRekening;
+  const selisih = dashboardData?.selisihRekening ?? 0;
   
   useEffect(() => {
     setCurrentDate(new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
@@ -197,7 +109,6 @@ export default function Dashboard() {
         setError('');
         console.log('Fetching dashboard data...');
         const result = await api.getDashboard();
-        console.log('Dashboard result:', result);
         
         if (result.success && result.data) {
           setDashboardData(result.data);
@@ -205,13 +116,13 @@ export default function Dashboard() {
           const rekeningData = (result.data.rekening || []).map((r: any) => ({
             nama: r.nama,
             saldo: r.saldo,
+            jenis: r.jenis,
           }));
-          const totalRek = rekeningData.reduce((acc: number, r: any) => acc + (parseInt(r.saldo) || 0), 0);
-          setTotalSaldoRekening(totalRek);
+          setTotalSaldoRekening(result.data.saldoRekening || 0);
           setFormattedData({
             saldoKas: formatRupiah(result.data.saldoKas || 0),
             labaRugi: formatRupiah(result.data.labaRugi || 0),
-            arusKas: formatRupiah(result.data.saldoKas || 0),
+            arusKas: formatRupiah(result.data.arusKas?.kenaikanKasBersih || 0),
             totalPendapatan: formatRupiah(result.data.totalPemasukan || 0),
             totalPengeluaran: formatRupiah(result.data.totalPengeluaran || 0),
             transactions: (result.data.recentTransactions || []).map((t: any) => ({
@@ -241,11 +152,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (periodeType === 'tanggal') {
-      setChartData(generateChartData(startDate, endDate, 'tanggal', dashboardData?.recentTransactions));
+      setChartData(buildPeriodSeries(dashboardData?.transactions || [], 'tanggal', startDate, endDate));
     } else if (periodeType === 'bulan') {
-      setChartData(generateChartData(`${startYear}-${startMonth}`, `${endYear}-${endMonth}`, 'bulan', dashboardData?.recentTransactions));
+      setChartData(buildPeriodSeries(dashboardData?.transactions || [], 'bulan', `${startYear}-${startMonth}`, `${endYear}-${endMonth}`));
     } else {
-      setChartData(generateChartData(startYear, endYear, 'tahun', dashboardData?.recentTransactions));
+      setChartData(buildPeriodSeries(dashboardData?.transactions || [], 'tahun', startYear, endYear));
     }
   }, [startDate, endDate, startYear, endYear, startMonth, endMonth, periodeType, dashboardData]);
 

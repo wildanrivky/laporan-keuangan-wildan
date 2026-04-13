@@ -1,15 +1,15 @@
 // API Service untuk komunikasi dengan Google Sheets API
 
-const SHEETS_API_URL = '/api/sheets';
+import {
+  buildAccountingSummary,
+  normalizeRekening,
+  normalizeTransaction,
+  sortTransactionsNewestFirst,
+  type AccountingRekening as Rekening,
+  type AccountingTransaction as Transaksi,
+} from '@/lib/accounting';
 
-export interface Transaksi {
-  id: string;
-  tanggal: string;
-  deskripsi: string;
-  kategori: string;
-  jumlah: number;
-  tipe: 'debit' | 'credit';
-}
+const SHEETS_API_URL = '/api/sheets';
 
 export type TransaksiInput = Omit<Transaksi, 'id'>;
 
@@ -19,22 +19,21 @@ export interface Kategori {
   tipe: 'pemasukan' | 'pengeluaran';
 }
 
-export interface Rekening {
-  id: string;
-  nama: string;
-  nomor: string;
-  saldo: number;
-  jenis: 'Bank' | 'Kas';
-}
-
 export interface DashboardData {
   totalPemasukan: number;
   totalPengeluaran: number;
+  totalBiaya: number;
   saldoKas: number;
+  saldoRekening: number;
+  selisihRekening: number;
   labaRugi: number;
   totalTransaksi: number;
   rekening: Rekening[];
+  transactions: Transaksi[];
   recentTransactions: Transaksi[];
+  labaRugiDetail: ReturnType<typeof buildAccountingSummary>['labaRugi'];
+  arusKas: ReturnType<typeof buildAccountingSummary>['arusKas'];
+  neraca: ReturnType<typeof buildAccountingSummary>['neraca'];
 }
 
 class ApiService {
@@ -51,14 +50,29 @@ class ApiService {
 
   // Transaksi
   async getTransaksi(tanggalAwal?: string, tanggalAkhir?: string) {
-    return this.fetchSheets<{ success: boolean; data: Transaksi[] }>('Transaksi');
+    const params = new URLSearchParams({ table: 'Transaksi' });
+    if (tanggalAwal) params.set('startDate', tanggalAwal);
+    if (tanggalAkhir) params.set('endDate', tanggalAkhir);
+
+    try {
+      const res = await fetch(`${SHEETS_API_URL}?${params.toString()}`);
+      const result = await res.json();
+      return {
+        ...result,
+        data: sortTransactionsNewestFirst((result.data || []).map(normalizeTransaction)),
+      } as { success: boolean; data: Transaksi[] };
+    } catch (err: any) {
+      console.error('Error fetching transaksi:', err.message);
+      return { success: false, data: [], message: err.message };
+    }
   }
 
   async addTransaksi(data: TransaksiInput) {
+    const id = Date.now().toString();
     const res = await fetch(SHEETS_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ table: 'Transaksi', data: { ...data, id: Date.now().toString() } })
+      body: JSON.stringify({ table: 'Transaksi', data: { ...data, id } })
     });
     return res.json();
   }
@@ -72,7 +86,7 @@ class ApiService {
     const res = await fetch(SHEETS_API_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ table: 'Transaksi', data, id })
+      body: JSON.stringify({ table: 'Transaksi', data: { ...data, id }, id })
     });
     return res.json();
   }
@@ -84,43 +98,36 @@ class ApiService {
 
   // Rekening
   async getRekening() {
-    return this.fetchSheets<{ success: boolean; data: Rekening[] }>('Rekening');
+    try {
+      const res = await fetch(`${SHEETS_API_URL}?table=Rekening`);
+      const result = await res.json();
+      return {
+        ...result,
+        data: (result.data || []).map(normalizeRekening),
+      } as { success: boolean; data: Rekening[] };
+    } catch (err: any) {
+      console.error('Error fetching rekening:', err.message);
+      return { success: false, data: [], message: err.message };
+    }
   }
 
   // Dashboard - hitung dari transaksi dan rekening
   async getDashboard() {
     try {
-      const [transaksiRes, rekeningRes] = await Promise.all([
-        this.getTransaksi(),
-        this.getRekening()
-      ]);
+      const res = await fetch(`${SHEETS_API_URL}?action=dashboard`);
+      const result = await res.json();
 
-      const transactions = transaksiRes.data || [];
-      const rekening = rekeningRes.data || [];
-
-      let totalPemasukan = 0;
-      let totalPengeluaran = 0;
-
-      transactions.forEach((t: Transaksi) => {
-        if (t.tipe === 'debit') {
-          totalPemasukan += Number(t.jumlah);
-        } else {
-          totalPengeluaran += Number(t.jumlah);
-        }
-      });
-
-      const totalSaldoRekening = rekening.reduce((sum: number, r: Rekening) => sum + Number(r.saldo), 0);
+      if (!result.success) {
+        return { success: false, message: result.message };
+      }
 
       return {
         success: true,
         data: {
-          totalPemasukan,
-          totalPengeluaran,
-          saldoKas: totalSaldoRekening,
-          labaRugi: totalPemasukan - totalPengeluaran,
-          totalTransaksi: transactions.length,
-          rekening,
-          recentTransactions: transactions.slice(-10).reverse()
+          ...result.data,
+          rekening: (result.data.rekening || []).map(normalizeRekening),
+          transactions: (result.data.transactions || []).map(normalizeTransaction),
+          recentTransactions: (result.data.recentTransactions || []).map(normalizeTransaction),
         }
       };
     } catch (err: any) {
@@ -136,11 +143,10 @@ class ApiService {
     for (let i = 1; i < rows.length; i++) {
       const cols = rows[i].split('\t');
       const transaksi = {
-        id: Date.now().toString() + i,
         tanggal: cols[headers.indexOf('tanggal')] || new Date().toISOString().split('T')[0],
         deskripsi: cols[headers.indexOf('deskripsi')] || '',
         kategori: cols[headers.indexOf('kategori')] || '',
-        jumlah: parseInt(cols[headers.indexOf('jumlah')]) || 0,
+        jumlah: Number.parseInt(cols[headers.indexOf('jumlah')], 10) || 0,
         tipe: (cols[headers.indexOf('tipe')] || 'debit') as 'debit' | 'credit'
       };
       await this.addTransaksi(transaksi);

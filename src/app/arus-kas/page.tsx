@@ -13,6 +13,7 @@ import {
   Legend
 } from 'recharts';
 import { api, formatRupiah } from '@/lib/api';
+import { buildAccountingSummary, buildPeriodSeries } from '@/lib/accounting';
 
 const PERIOD_TYPES = [
   { value: 'tanggal', label: 'Tanggal ke Tanggal' },
@@ -43,6 +44,11 @@ const TAHUN_OPTIONS = Array.from({ length: 10 }, (_, i) => {
   return { value: year.toString(), label: year.toString() };
 });
 
+const getMonthEndDate = (year: string, month: string) => {
+  const endDate = new Date(Number(year), Number(month), 0).getDate();
+  return `${year}-${month}-${String(endDate).padStart(2, '0')}`;
+};
+
 export default function ArusKasPage() {
   const [periodeType, setPeriodeType] = useState('bulan');
   const [startYear, setStartYear] = useState(currentYear.toString());
@@ -61,27 +67,54 @@ export default function ArusKasPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const result = await api.getDashboard();
+        setLoading(true);
+        const effectiveStartDate =
+          periodeType === 'tanggal'
+            ? startDate
+            : periodeType === 'bulan'
+              ? `${startYear}-${startMonth}-01`
+              : `${startYear}-01-01`;
+        const effectiveEndDate =
+          periodeType === 'tanggal'
+            ? endDate
+            : periodeType === 'bulan'
+              ? getMonthEndDate(endYear, endMonth)
+              : `${endYear}-12-31`;
+
+        const result = await api.getTransaksi(effectiveStartDate, effectiveEndDate);
         if (result.success && result.data) {
-          setDashboardData(result.data);
+          const summary = buildAccountingSummary(result.data, []);
+          const chartSeries = buildPeriodSeries(
+            result.data,
+            periodeType as 'tanggal' | 'bulan' | 'tahun',
+            periodeType === 'tanggal' ? effectiveStartDate : periodeType === 'bulan' ? `${startYear}-${startMonth}` : startYear,
+            periodeType === 'tanggal' ? effectiveEndDate : periodeType === 'bulan' ? `${endYear}-${endMonth}` : endYear
+          );
+
+          setDashboardData({
+            ...summary,
+            chartData: chartSeries.map((point) => ({
+              bulan: point.label,
+              masuk: point.pendapatan,
+              keluar: point.pengeluaran,
+              saldo: point.saldo,
+            })),
+          });
         }
       } catch (err) {
         console.error(err);
+      } finally {
+        setLoading(false);
       }
     };
     fetchData();
-  }, []);
+  }, [endDate, endMonth, endYear, periodeType, startDate, startMonth, startYear]);
 
-  const totalPemasukan = dashboardData?.totalPemasukan || 0;
-  const totalPengeluaran = dashboardData?.totalPengeluaran || 0;
-  const arusKasBersih = totalPemasukan - totalPengeluaran;
-  const saldoKas = dashboardData?.saldoKas || 0;
-
-  const chartData = dashboardData?.recentTransactions?.slice(0, 6).map((t: any, i: number) => ({
-    bulan: `Bulan ${i + 1}`,
-    masuk: t.tipe === 'debit' ? t.jumlah : 0,
-    keluar: t.tipe === 'credit' ? t.jumlah : 0,
-  })) || [];
+  const totalPemasukan = dashboardData?.arusKas?.kasMasukOperasi || 0;
+  const totalPengeluaran = (dashboardData?.arusKas?.kasKeluarOperasi || 0) + (dashboardData?.arusKas?.kasKeluarInvestasi || 0);
+  const arusKasBersih = dashboardData?.arusKas?.kenaikanKasBersih || 0;
+  const saldoKas = dashboardData?.arusKas?.saldoKasAkhir || 0;
+  const chartData = dashboardData?.chartData || [];
 
   const getPeriodeLabel = () => {
     if (periodeType === 'tanggal') {
@@ -287,30 +320,36 @@ export default function ArusKasPage() {
       {showPreview && (
         <div className="card">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Grafik Arus Kas</h3>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="colorMasuk" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="colorKeluar" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="bulan" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} tickFormatter={(value) => `${(value / 1000000).toFixed(0)}jt`} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend />
-                <Area type="monotone" dataKey="masuk" name="Kas Masuk" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorMasuk)" />
-                <Area type="monotone" dataKey="keluar" name="Kas Keluar" stroke="#f43f5e" strokeWidth={2} fillOpacity={1} fill="url(#colorKeluar)" />
-                <Area type="monotone" dataKey="saldo" name="Saldo Kas" stroke="#3b82f6" strokeWidth={2} fill="transparent" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          {loading ? (
+            <div className="h-80 flex items-center justify-center">
+              <Loader2 className="animate-spin text-emerald-600" size={32} />
+            </div>
+          ) : (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="colorMasuk" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorKeluar" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="bulan" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} tickFormatter={(value) => `${(value / 1000000).toFixed(0)}jt`} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                  <Area type="monotone" dataKey="masuk" name="Kas Masuk" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorMasuk)" />
+                  <Area type="monotone" dataKey="keluar" name="Kas Keluar" stroke="#f43f5e" strokeWidth={2} fillOpacity={1} fill="url(#colorKeluar)" />
+                  <Area type="monotone" dataKey="saldo" name="Saldo Kas" stroke="#3b82f6" strokeWidth={2} fill="transparent" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
       )}
 

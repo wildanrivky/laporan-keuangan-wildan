@@ -16,6 +16,7 @@ import {
   Legend
 } from 'recharts';
 import { api, formatRupiah } from '@/lib/api';
+import { buildAccountingSummary } from '@/lib/accounting';
 
 const PERIOD_TYPES = [
   { value: 'tanggal', label: 'Tanggal ke Tanggal' },
@@ -46,6 +47,11 @@ const TAHUN_OPTIONS = Array.from({ length: 10 }, (_, i) => {
   return { value: year.toString(), label: year.toString() };
 });
 
+const getMonthEndDate = (year: string, month: string) => {
+  const endDate = new Date(Number(year), Number(month), 0).getDate();
+  return `${year}-${month}-${String(endDate).padStart(2, '0')}`;
+};
+
 export default function NeracaPage() {
   const [periodeType, setPeriodeType] = useState('bulan');
   const [startYear, setStartYear] = useState(currentYear.toString());
@@ -64,20 +70,36 @@ export default function NeracaPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const result = await api.getDashboard();
-        if (result.success && result.data) {
-          setDashboardData(result.data);
+        setLoading(true);
+        const effectiveEndDate =
+          periodeType === 'tanggal'
+            ? endDate
+            : periodeType === 'bulan'
+              ? getMonthEndDate(endYear, endMonth)
+              : `${endYear}-12-31`;
+
+        const [transaksiResult, rekeningResult] = await Promise.all([
+          api.getTransaksi(undefined, effectiveEndDate),
+          api.getRekening(),
+        ]);
+
+        if (transaksiResult.success && transaksiResult.data && rekeningResult.success && rekeningResult.data) {
+          const summary = buildAccountingSummary(transaksiResult.data, rekeningResult.data);
+          setDashboardData(summary);
         }
       } catch (err) {
         console.error(err);
+      } finally {
+        setLoading(false);
       }
     };
     fetchData();
-  }, []);
+  }, [endDate, endMonth, endYear, periodeType]);
 
-  const totalAset = dashboardData?.saldoKas || 0;
-  const totalKewajiban = 0;
-  const totalEkuitas = dashboardData?.labaRugi || 0;
+  const totalAset = dashboardData?.neraca?.aset?.totalAset || 0;
+  const totalKewajiban = dashboardData?.neraca?.kewajiban?.totalKewajiban || 0;
+  const totalEkuitas = dashboardData?.neraca?.ekuitas?.totalEkuitas || 0;
+  const asetLain = dashboardData?.neraca?.aset?.asetLain || {};
 
   const getPeriodeLabel = () => {
     if (periodeType === 'tanggal') {
@@ -275,60 +297,82 @@ export default function NeracaPage() {
       )}
 
       <div className="card">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div>
-            <h3 className="text-sm font-medium text-emerald-600 mb-4">ASET</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between py-2 border-b border-slate-100">
-                <span className="text-sm text-slate-700">Kas & Bank</span>
-                <span className="text-sm text-slate-900 font-medium">{formatRupiah(totalAset)}</span>
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="animate-spin text-emerald-600" size={32} />
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div>
+                <h3 className="text-sm font-medium text-emerald-600 mb-4">ASET</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between py-2 border-b border-slate-100">
+                    <span className="text-sm text-slate-700">Kas & Bank</span>
+                    <span className="text-sm text-slate-900 font-medium">{formatRupiah(dashboardData?.neraca?.aset?.kas || 0)}</span>
+                  </div>
+                  {Object.entries(asetLain).map(([namaAset, nilai]) => (
+                    <div key={namaAset} className="flex justify-between py-2 border-b border-slate-100">
+                      <span className="text-sm text-slate-700">{namaAset}</span>
+                      <span className="text-sm text-slate-900 font-medium">{formatRupiah(Number(nilai) || 0)}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between py-3 border-t-2 border-slate-200">
+                    <span className="text-base font-semibold text-slate-900">Total Aset</span>
+                    <span className="text-base font-bold text-emerald-700">{formatRupiah(totalAset)}</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-between py-3 border-t-2 border-slate-200">
-                <span className="text-base font-semibold text-slate-900">Total Aset</span>
-                <span className="text-base font-bold text-emerald-700">{formatRupiah(totalAset)}</span>
+
+              <div>
+                <h3 className="text-sm font-medium text-red-600 mb-4">KEWAJIBAN</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between py-2 border-b border-slate-100">
+                    <span className="text-sm text-slate-700">-</span>
+                    <span className="text-sm text-slate-900 font-medium">-</span>
+                  </div>
+                  <div className="flex justify-between py-3 border-t-2 border-slate-200">
+                    <span className="text-base font-semibold text-slate-900">Total Kewajiban</span>
+                    <span className="text-base font-bold text-red-700">{formatRupiah(totalKewajiban)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-medium text-blue-600 mb-4">EKUITAS</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between py-2 border-b border-slate-100">
+                    <span className="text-sm text-slate-700">Modal / Saldo Awal</span>
+                    <span className="text-sm text-slate-900 font-medium">
+                      {formatRupiah(dashboardData?.neraca?.ekuitas?.modalSaldoAwal || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b border-slate-100">
+                    <span className="text-sm text-slate-700">Laba Berjalan</span>
+                    <span className="text-sm text-slate-900 font-medium">
+                      {formatRupiah(dashboardData?.neraca?.ekuitas?.labaBerjalan || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-3 border-t-2 border-slate-200">
+                    <span className="text-base font-semibold text-slate-900">Total Ekuitas</span>
+                    <span className="text-base font-bold text-blue-700">{formatRupiah(totalEkuitas)}</span>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div>
-            <h3 className="text-sm font-medium text-red-600 mb-4">KEWAJIBAN</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between py-2 border-b border-slate-100">
-                <span className="text-sm text-slate-700">-</span>
-                <span className="text-sm text-slate-900 font-medium">-</span>
+            <div className="mt-8 pt-6 border-t border-slate-200">
+              <div className="flex justify-between items-center">
+                <span className="text-xl font-bold text-slate-900">TOTAL ASET</span>
+                <span className="text-xl font-bold text-emerald-700">{formatRupiah(totalAset)}</span>
               </div>
-              <div className="flex justify-between py-3 border-t-2 border-slate-200">
-                <span className="text-base font-semibold text-slate-900">Total Kewajiban</span>
-                <span className="text-base font-bold text-red-700">{formatRupiah(totalKewajiban)}</span>
+              <div className="flex justify-between items-center mt-2">
+                <span className="text-lg text-slate-700">TOTAL KEWAJIBAN + EKUITAS</span>
+                <span className="text-lg font-bold text-slate-900">{formatRupiah(totalKewajiban + totalEkuitas)}</span>
               </div>
             </div>
-          </div>
-
-          <div>
-            <h3 className="text-sm font-medium text-blue-600 mb-4">EKUITAS</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between py-2 border-b border-slate-100">
-                <span className="text-sm text-slate-700">Laba/Rugi</span>
-                <span className="text-sm text-slate-900 font-medium">{formatRupiah(totalEkuitas)}</span>
-              </div>
-              <div className="flex justify-between py-3 border-t-2 border-slate-200">
-                <span className="text-base font-semibold text-slate-900">Total Ekuitas</span>
-                <span className="text-base font-bold text-blue-700">{formatRupiah(totalEkuitas)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-8 pt-6 border-t border-slate-200">
-          <div className="flex justify-between items-center">
-            <span className="text-xl font-bold text-slate-900">TOTAL ASET</span>
-            <span className="text-xl font-bold text-emerald-700">{formatRupiah(totalAset)}</span>
-          </div>
-          <div className="flex justify-between items-center mt-2">
-            <span className="text-lg text-slate-700">TOTAL KEWAJIBAN + EKUITAS</span>
-            <span className="text-lg font-bold text-slate-900">{formatRupiah(totalKewajiban + totalEkuitas)}</span>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
