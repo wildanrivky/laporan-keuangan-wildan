@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { CheckCircle, AlertTriangle, Wallet, Building, PiggyBank, Plus, Edit2, Trash2, Loader2, X } from 'lucide-react';
-import { api, formatRupiah } from '@/lib/api';
+import { useState } from 'react';
+import { CheckCircle, AlertTriangle, Wallet, Building, PiggyBank, Plus, Edit2, Trash2, X } from 'lucide-react';
+import { formatRupiah } from '@/lib/api';
 
 type Rekening = {
   id: string;
@@ -14,8 +14,6 @@ type Rekening = {
 
 export default function CekRekeningPage() {
   const [rekening, setRekening] = useState<Rekening[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [saldoKas, setSaldoKas] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -33,28 +31,6 @@ export default function CekRekeningPage() {
     jenis: 'Bank',
   });
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const rekeningResult = await api.getRekening();
-        const dashboardResult = await api.getDashboard();
-        
-        if (rekeningResult.success && rekeningResult.data) {
-          setRekening(rekeningResult.data);
-        }
-        if (dashboardResult.success && dashboardResult.data) {
-          setSaldoKas(dashboardResult.data.saldoKas || 0);
-        }
-      } catch (err: any) {
-        setError(err.message || 'Gagal mengambil data');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
-
   const totalSaldoRekening = rekening.reduce((acc, r) => acc + r.saldo, 0);
   const selisih = saldoKas - totalSaldoRekening;
   const isMatch = selisih === 0;
@@ -62,14 +38,18 @@ export default function CekRekeningPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const newRekening: Rekening = {
+        id: editId || Date.now().toString(),
+        nama: formData.nama,
+        nomor: formData.nomor,
+        saldo: parseInt(formData.saldo),
+        jenis: formData.jenis,
+      };
+      
       if (editId) {
-        await api.updateRekening({ id: editId, saldo: parseInt(formData.saldo), nama: formData.nama, nomor: formData.nomor });
+        setRekening(rekening.map(r => r.id === editId ? newRekening : r));
       } else {
-        await api.addRekening({ nama: formData.nama, nomor: formData.nomor, saldo: parseInt(formData.saldo), jenis: formData.jenis });
-      }
-      const result = await api.getRekening();
-      if (result.success && result.data) {
-        setRekening(result.data);
+        setRekening([...rekening, newRekening]);
       }
       setShowModal(false);
       setEditId(null);
@@ -93,11 +73,7 @@ export default function CekRekeningPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Yakin ingin menghapus rekening ini?')) return;
     try {
-      await api.deleteRekening(id);
-      const result = await api.getRekening();
-      if (result.success && result.data) {
-        setRekening(result.data);
-      }
+      setRekening(rekening.filter(r => r.id !== id));
     } catch (err: any) {
       alert('Gagal menghapus: ' + err.message);
     }
@@ -122,47 +98,39 @@ export default function CekRekeningPage() {
         </button>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="animate-spin text-emerald-600" size={32} />
-        </div>
-      ) : error ? (
-        <div className="text-center py-12 text-red-600">{error}</div>
-      ) : (
-        <>
-          <div className={`card ${isMatch ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-600">Saldo di Laporan Keuangan</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1">{formatRupiah(saldoKas)}</p>
-              </div>
-              <div className="text-center">
-                {isMatch ? (
-                  <CheckCircle className="text-emerald-600 mx-auto" size={48} />
-                ) : (
-                  <AlertTriangle className="text-red-600 mx-auto" size={48} />
-                )}
-                <p className={`text-lg font-semibold mt-2 ${isMatch ? 'text-emerald-700' : 'text-red-700'}`}>
-                  {isMatch ? 'SESUAI' : 'TIDAK SESUAI'}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm text-slate-600">Total Saldo Rekening</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1">{formatRupiah(totalSaldoRekening)}</p>
-              </div>
-            </div>
-            <div className="mt-4 pt-4 border-t border-slate-200">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-600">Selisih</p>
-                <p className={`text-xl font-bold ${selisih === 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {selisih === 0 ? 'Rp 0' : formatRupiah(selisih)}
-                </p>
-              </div>
-            </div>
+      <div className={`card ${isMatch ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-slate-600">Saldo di Laporan Keuangan</p>
+            <p className="text-2xl font-bold text-slate-900 mt-1">{formatRupiah(saldoKas)}</p>
           </div>
+          <div className="text-center">
+            {isMatch ? (
+              <CheckCircle className="text-emerald-600 mx-auto" size={48} />
+            ) : (
+              <AlertTriangle className="text-red-600 mx-auto" size={48} />
+            )}
+            <p className={`text-lg font-semibold mt-2 ${isMatch ? 'text-emerald-700' : 'text-red-700'}`}>
+              {isMatch ? 'SESUAI' : 'TIDAK SESUAI'}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-slate-600">Total Saldo Rekening</p>
+            <p className="text-2xl font-bold text-slate-900 mt-1">{formatRupiah(totalSaldoRekening)}</p>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-slate-200">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-slate-600">Selisih</p>
+            <p className={`text-xl font-bold ${selisih === 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              {selisih === 0 ? 'Rp 0' : formatRupiah(selisih)}
+            </p>
+          </div>
+        </div>
+      </div>
 
-          <div className="card">
-            <h2 className="text-lg font-semibold text-slate-900 mb-6">Daftar Rekening</h2>
+      <div className="card">
+        <h2 className="text-lg font-semibold text-slate-900 mb-6">Daftar Rekening</h2>
             <div className="overflow-x-auto">
               <table className="w-full">
                   <thead>
@@ -206,8 +174,6 @@ export default function CekRekeningPage() {
               </table>
             </div>
           </div>
-        </>
-      )}
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, ArrowUpRight, ArrowDownRight, X, Loader2 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { useState } from 'react';
+import { Plus, Trash2, Edit2, ArrowUpRight, ArrowDownRight, X } from 'lucide-react';
 
 type Kategori = {
   id: string;
@@ -10,12 +9,19 @@ type Kategori = {
   tipe: 'debit' | 'credit';
 };
 
-const mockKategori: Kategori[] = [];
-
 export default function KategoriPage() {
-  const [kategori, setKategori] = useState<Kategori[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [kategori, setKategori] = useState<Kategori[]>([
+    { id: '1', nama: 'Pendapatan Jasa', tipe: 'debit' },
+    { id: '2', nama: 'Pendapatan Produksi', tipe: 'debit' },
+    { id: '3', nama: 'Pendapatan Lain', tipe: 'debit' },
+    { id: '4', nama: 'Persediaan', tipe: 'credit' },
+    { id: '5', nama: 'Perlengkapan', tipe: 'credit' },
+    { id: '6', nama: 'Biaya Listrik', tipe: 'credit' },
+    { id: '7', nama: 'Biaya Internet', tipe: 'credit' },
+    { id: '8', nama: 'Biaya Sewa', tipe: 'credit' },
+    { id: '9', nama: 'Biaya Gaji', tipe: 'credit' },
+    { id: '10', nama: 'Biaya Transport', tipe: 'credit' },
+  ]);
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -28,48 +34,23 @@ export default function KategoriPage() {
     tipe: 'debit' as 'debit' | 'credit',
   });
 
-  useEffect(() => {
-    const fetchKategori = async () => {
-      try {
-        setLoading(true);
-        const result = await api.getKategori();
-        if (result.success && result.data) {
-          setKategori(result.data.map((k: any) => ({
-            id: k.id,
-            nama: k.nama,
-            tipe: k.tipe === 'pemasukan' ? 'debit' : 'credit',
-          })));
-        }
-      } catch (err: any) {
-        setError(err.message || 'Gagal mengambil data');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchKategori();
-  }, []);
-
   const kategoriDebit = kategori.filter(k => k.tipe === 'debit');
   const kategoriCredit = kategori.filter(k => k.tipe === 'credit');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const apiTipe = formData.tipe === 'debit' ? 'pemasukan' : 'pengeluaran';
-    
     try {
+      const newKategori: Kategori = {
+        id: editId || Date.now().toString(),
+        nama: formData.nama,
+        tipe: formData.tipe,
+      };
+      
       if (editId) {
-        await api.updateKategori({ id: editId, nama: formData.nama, tipe: apiTipe });
+        setKategori(kategori.map(k => k.id === editId ? newKategori : k));
       } else {
-        await api.addKategori({ nama: formData.nama, tipe: apiTipe });
-      }
-      const result = await api.getKategori();
-      if (result.success && result.data) {
-        setKategori(result.data.map((k: any) => ({
-          id: k.id,
-          nama: k.nama,
-          tipe: k.tipe === 'pemasukan' ? 'debit' : 'credit',
-        })));
+        setKategori([...kategori, newKategori]);
       }
       setShowModal(false);
       setEditId(null);
@@ -91,15 +72,7 @@ export default function KategoriPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Yakin ingin menghapus kategori ini?')) return;
     try {
-      await api.deleteKategori(id);
-      const result = await api.getKategori();
-      if (result.success && result.data) {
-        setKategori(result.data.map((k: any) => ({
-          id: k.id,
-          nama: k.nama,
-          tipe: k.tipe === 'pemasukan' ? 'debit' : 'credit',
-        })));
-      }
+      setKategori(kategori.filter(k => k.id !== id));
     } catch (err: any) {
       alert('Gagal menghapus kategori: ' + err.message);
     }
@@ -119,71 +92,61 @@ export default function KategoriPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {loading ? (
-          <div className="col-span-2 flex items-center justify-center py-12">
-            <Loader2 className="animate-spin text-emerald-600" size={32} />
+        <div className="card">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+              <ArrowUpRight size={12} />
+            </span>
+            <h2 className="text-lg font-semibold text-slate-900">Pemasukan</h2>
           </div>
-        ) : error ? (
-          <div className="col-span-2 text-center py-12 text-red-600">{error}</div>
-        ) : (
-          <>
-            <div className="card">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                  <ArrowUpRight size={12} />
-                </span>
-                <h2 className="text-lg font-semibold text-slate-900">Pemasukan</h2>
-              </div>
-              <div className="space-y-2">
-                {kategoriDebit.length === 0 ? (
-                  <p className="text-sm text-slate-400 text-center py-4">Tidak ada kategori</p>
-                ) : (
-                  kategoriDebit.map((k) => (
-                    <div key={k.id} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg">
-                      <span className="text-sm text-slate-700">{k.nama}</span>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => handleEdit(k)} className="p-1 text-slate-400 hover:text-emerald-600">
-                          <Edit2 size={14} />
-                        </button>
-                        <button onClick={() => handleDelete(k.id)} className="p-1 text-slate-400 hover:text-red-600">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+          <div className="space-y-2">
+            {kategoriDebit.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-4">Tidak ada kategori</p>
+            ) : (
+              kategoriDebit.map((k) => (
+                <div key={k.id} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg">
+                  <span className="text-sm text-slate-700">{k.nama}</span>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => handleEdit(k)} className="p-1 text-slate-400 hover:text-emerald-600">
+                      <Edit2 size={14} />
+                    </button>
+                    <button onClick={() => handleDelete(k.id)} className="p-1 text-slate-400 hover:text-red-600">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
 
-            <div className="card">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                  <ArrowDownRight size={12} />
-                </span>
-                <h2 className="text-lg font-semibold text-slate-900">Pengeluaran</h2>
-              </div>
-              <div className="space-y-2">
-                {kategoriCredit.length === 0 ? (
-                  <p className="text-sm text-slate-400 text-center py-4">Tidak ada kategori</p>
-                ) : (
-                  kategoriCredit.map((k) => (
-                    <div key={k.id} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg">
-                      <span className="text-sm text-slate-700">{k.nama}</span>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => handleEdit(k)} className="p-1 text-slate-400 hover:text-emerald-600">
-                          <Edit2 size={14} />
-                        </button>
-                        <button onClick={() => handleDelete(k.id)} className="p-1 text-slate-400 hover:text-red-600">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </>
-        )}
+        <div className="card">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+              <ArrowDownRight size={12} />
+            </span>
+            <h2 className="text-lg font-semibold text-slate-900">Pengeluaran</h2>
+          </div>
+          <div className="space-y-2">
+            {kategoriCredit.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-4">Tidak ada kategori</p>
+            ) : (
+              kategoriCredit.map((k) => (
+                <div key={k.id} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg">
+                  <span className="text-sm text-slate-700">{k.nama}</span>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => handleEdit(k)} className="p-1 text-slate-400 hover:text-emerald-600">
+                      <Edit2 size={14} />
+                    </button>
+                    <button onClick={() => handleDelete(k.id)} className="p-1 text-slate-400 hover:text-red-600">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       {showModal && (
