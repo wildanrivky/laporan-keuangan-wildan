@@ -1,7 +1,6 @@
-// API Service untuk komunikasi dengan Google Apps Script
+// API Service untuk komunikasi dengan Google Sheets API
 
-// Ganti dengan URL deploy dari Google Apps Script Anda
-const API_URL = 'https://script.google.com/macros/s/AKfycbxY_UXxtMfd82GCYF9RLCd-TEfxIdO_oPyDX-ox2yNmq04YRwGA3fU7TgLxmlp0FycH/exec';
+const SHEETS_API_URL = '/api/sheets';
 
 export interface Transaksi {
   id: string;
@@ -39,188 +38,117 @@ export interface DashboardData {
 }
 
 class ApiService {
-  private baseUrl: string;
-
-  constructor(baseUrl: string = API_URL) {
-    this.baseUrl = baseUrl;
-  }
-
-  private async fetchApi<T>(action: string, params: Record<string, string> = {}): Promise<T> {
-    // Selalu gunakan mock data untuk menghindari CORS issue dengan Google Apps Script
-    console.log('Using mock data for:', action);
-    return this.getMockData(action) as T;
-    
-    /*
-    const url = new URL(this.baseUrl);
-    url.searchParams.set('action', action);
-    
-    Object.entries(params).forEach(([key, value]) => {
-      if (value) url.searchParams.set(key, value);
-    });
-
-    console.log('Fetching:', url.toString());
-
+  private async fetchSheets<T>(table: string): Promise<T> {
     try {
-      const response = await fetch(url.toString());
-      const text = await response.text();
-      console.log('Response:', text.substring(0, 100));
-      
-      const data = JSON.parse(text);
-      if (data.success) return data;
-      console.error('API error:', data.message);
-      return this.getMockData(action) as T;
+      const res = await fetch(`${SHEETS_API_URL}?table=${table}`);
+      const data = await res.json();
+      return data as T;
     } catch (err: any) {
-      console.error('Error:', err.message);
-      return this.getMockData(action) as T;
-    }
-    */
-  }
-
-  private getMockData(action: string): any {
-    const mockTransactions = [
-      { id: '1', tanggal: '2025-04-14', deskripsi: 'Investasi', kategori: 'Pendapatan Jasa', jumlah: 20000000, tipe: 'debit' },
-    ];
-    
-    switch(action) {
-      case 'getDashboard':
-        return { 
-          success: true, 
-          data: {
-            totalPemasukan: 20000000,
-            totalPengeluaran: 0,
-            saldoKas: 20000000,
-            labaRugi: 20000000,
-            totalTransaksi: 1,
-            rekening: [
-              { id: '1', nama: 'Bank BCA', saldo: 10000000, jenis: 'Bank' },
-              { id: '2', nama: 'Bank Mandiri', saldo: 5000000, jenis: 'Bank' },
-              { id: '3', nama: 'Kas Tangan', saldo: 5000000, jenis: 'Kas' },
-            ],
-            recentTransactions: mockTransactions
-          }
-        };
-      case 'getTransaksi':
-        return { success: true, data: mockTransactions };
-      case 'getKategori':
-        return { 
-          success: true, 
-          data: [
-            { id: '1', nama: 'Pendapatan Jasa', tipe: 'pemasukan' },
-            { id: '2', nama: 'Pendapatan Produksi', tipe: 'pemasukan' },
-            { id: '3', nama: 'Pendapatan Lain', tipe: 'pemasukan' },
-            { id: '4', nama: 'Persediaan', tipe: 'pengeluaran' },
-            { id: '5', nama: 'Perlengkapan', tipe: 'pengeluaran' },
-            { id: '6', nama: 'Biaya Listrik', tipe: 'pengeluaran' },
-            { id: '7', nama: 'Biaya Internet', tipe: 'pengeluaran' },
-            { id: '8', nama: 'Biaya Sewa', tipe: 'pengeluaran' },
-            { id: '9', nama: 'Biaya Gaji', tipe: 'pengeluaran' },
-            { id: '10', nama: 'Biaya Transport', tipe: 'pengeluaran' },
-          ]
-        };
-      case 'getRekening':
-        return { 
-          success: true, 
-          data: []
-        };
-      case 'getDashboard':
-        return { 
-          success: true, 
-          data: {
-            totalPemasukan: 20000000,
-            totalPengeluaran: 0,
-            saldoKas: 0,
-            labaRugi: 20000000,
-            totalTransaksi: 1,
-            rekening: [],
-            recentTransactions: mockTransactions
-          }
-        };
-      default:
-        return { success: false, message: 'Unknown action' };
+      console.error('Error fetching:', err.message);
+      return { success: false, data: [], message: err.message } as T;
     }
   }
 
   // Transaksi
   async getTransaksi(tanggalAwal?: string, tanggalAkhir?: string) {
-    return this.fetchApi<{ success: boolean; data: Transaksi[] }>('getTransaksi', {
-      tanggalAwal: tanggalAwal || '',
-      tanggalAkhir: tanggalAkhir || ''
-    });
+    return this.fetchSheets<{ success: boolean; data: Transaksi[] }>('Transaksi');
   }
 
   async addTransaksi(data: TransaksiInput) {
-    return this.fetchApi<{ success: boolean; message: string; id?: string }>('addTransaksi', {
-      data: JSON.stringify(data)
+    const res = await fetch(SHEETS_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ table: 'Transaksi', data: { ...data, id: Date.now().toString() } })
     });
-  }
-
-  async updateTransaksi(id: string, data: Partial<Transaksi>) {
-    return this.fetchApi<{ success: boolean; message: string }>('updateTransaksi', {
-      id,
-      data: JSON.stringify(data)
-    });
+    return res.json();
   }
 
   async deleteTransaksi(id: string) {
-    return this.fetchApi<{ success: boolean; message: string }>('deleteTransaksi', { id });
+    const res = await fetch(`${SHEETS_API_URL}?table=Transaksi&id=${id}`, { method: 'DELETE' });
+    return res.json();
+  }
+
+  async updateTransaksi(id: string, data: Partial<Transaksi>) {
+    const res = await fetch(SHEETS_API_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ table: 'Transaksi', data, id })
+    });
+    return res.json();
   }
 
   // Kategori
   async getKategori() {
-    return this.fetchApi<{ success: boolean; data: Kategori[] }>('getKategori');
-  }
-
-  async addKategori(data: { nama: string; tipe: string }) {
-    return this.fetchApi<{ success: boolean; message: string }>('addKategori', {
-      data: JSON.stringify(data)
-    });
-  }
-
-  async updateKategori(data: { id: string; nama: string; tipe: string }) {
-    return this.fetchApi<{ success: boolean; message: string }>('updateKategori', {
-      data: JSON.stringify(data)
-    });
-  }
-
-  async deleteKategori(id: string) {
-    return this.fetchApi<{ success: boolean; message: string }>('deleteKategori', { id });
+    return this.fetchSheets<{ success: boolean; data: Kategori[] }>('Kategori');
   }
 
   // Rekening
   async getRekening() {
-    return this.fetchApi<{ success: boolean; data: Rekening[] }>('getRekening');
+    return this.fetchSheets<{ success: boolean; data: Rekening[] }>('Rekening');
   }
 
-  async updateRekening(data: { id: string; saldo: number; nama?: string; nomor?: string }) {
-    return this.fetchApi<{ success: boolean; message: string }>('updateRekening', {
-      data: JSON.stringify(data)
-    });
-  }
-
-  async addRekening(data: { nama: string; nomor: string; saldo: number; jenis: string }) {
-    return this.fetchApi<{ success: boolean; message: string }>('addRekening', {
-      data: JSON.stringify(data)
-    });
-  }
-
-  async deleteRekening(id: string) {
-    return this.fetchApi<{ success: boolean; message: string }>('deleteRekening', { id });
-  }
-
-  // Dashboard
+  // Dashboard - hitung dari transaksi dan rekening
   async getDashboard() {
-    return this.fetchApi<{ success: boolean; data: DashboardData }>('getDashboard');
+    try {
+      const [transaksiRes, rekeningRes] = await Promise.all([
+        this.getTransaksi(),
+        this.getRekening()
+      ]);
+
+      const transactions = transaksiRes.data || [];
+      const rekening = rekeningRes.data || [];
+
+      let totalPemasukan = 0;
+      let totalPengeluaran = 0;
+
+      transactions.forEach((t: Transaksi) => {
+        if (t.tipe === 'debit') {
+          totalPemasukan += Number(t.jumlah);
+        } else {
+          totalPengeluaran += Number(t.jumlah);
+        }
+      });
+
+      const totalSaldoRekening = rekening.reduce((sum: number, r: Rekening) => sum + Number(r.saldo), 0);
+
+      return {
+        success: true,
+        data: {
+          totalPemasukan,
+          totalPengeluaran,
+          saldoKas: totalSaldoRekening,
+          labaRugi: totalPemasukan - totalPengeluaran,
+          totalTransaksi: transactions.length,
+          rekening,
+          recentTransactions: transactions.slice(-10).reverse()
+        }
+      };
+    } catch (err: any) {
+      return { success: false, message: err.message };
+    }
   }
 
-  // Import
+  // Import Transaksi from TSV
   async importTransaksi(tsvData: string) {
-    return this.fetchApi<{ success: boolean; message: string }>('importTransaksi', {
-      tsvData
-    });
+    const rows = tsvData.split('\n').filter(row => row.trim());
+    const headers = rows[0].split('\t');
+    
+    for (let i = 1; i < rows.length; i++) {
+      const cols = rows[i].split('\t');
+      const transaksi = {
+        id: Date.now().toString() + i,
+        tanggal: cols[headers.indexOf('tanggal')] || new Date().toISOString().split('T')[0],
+        deskripsi: cols[headers.indexOf('deskripsi')] || '',
+        kategori: cols[headers.indexOf('kategori')] || '',
+        jumlah: parseInt(cols[headers.indexOf('jumlah')]) || 0,
+        tipe: (cols[headers.indexOf('tipe')] || 'debit') as 'debit' | 'credit'
+      };
+      await this.addTransaksi(transaksi);
+    }
+    return { success: true, message: 'Import berhasil' };
   }
 }
 
-// Export singleton instance
 export const api = new ApiService();
 
 // Helper functions
