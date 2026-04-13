@@ -71,11 +71,7 @@ class ApiService {
 
   private getMockData(action: string): any {
     const mockTransactions = [
-      { id: '1', tanggal: '2025-04-10', deskripsi: 'Penjualan Produk A', kategori: 'Pendapatan Jasa', jumlah: 2500000, tipe: 'debit' },
-      { id: '2', tanggal: '2025-04-09', deskripsi: 'Pembelian Bahan Baku', kategori: 'Persediaan', jumlah: 1200000, tipe: 'credit' },
-      { id: '3', tanggal: '2025-04-08', deskripsi: 'Pembayaran Listrik', kategori: 'Biaya Listrik', jumlah: 350000, tipe: 'credit' },
-      { id: '4', tanggal: '2025-04-07', deskripsi: 'Pendapatan Jasa', kategori: 'Pendapatan Jasa', jumlah: 800000, tipe: 'debit' },
-      { id: '5', tanggal: '2025-04-06', deskripsi: 'Pembelian Perlengkapan', kategori: 'Perlengkapan', jumlah: 200000, tipe: 'credit' },
+      { id: '1', tanggal: '2025-04-14', deskripsi: 'Investasi', kategori: 'Pendapatan Jasa', jumlah: 20000000, tipe: 'debit' },
     ];
     
     switch(action) {
@@ -83,15 +79,15 @@ class ApiService {
         return { 
           success: true, 
           data: {
-            totalPemasukan: 3300000,
-            totalPengeluaran: 1750000,
-            saldoKas: 15500000,
-            labaRugi: 1550000,
-            totalTransaksi: 5,
+            totalPemasukan: 20000000,
+            totalPengeluaran: 0,
+            saldoKas: 20000000,
+            labaRugi: 20000000,
+            totalTransaksi: 1,
             rekening: [
               { id: '1', nama: 'Bank BCA', saldo: 10000000, jenis: 'Bank' },
               { id: '2', nama: 'Bank Mandiri', saldo: 5000000, jenis: 'Bank' },
-              { id: '3', nama: 'Kas Tangan', saldo: 500000, jenis: 'Kas' },
+              { id: '3', nama: 'Kas Tangan', saldo: 5000000, jenis: 'Kas' },
             ],
             recentTransactions: mockTransactions
           }
@@ -120,7 +116,7 @@ class ApiService {
           data: [
             { id: '1', nama: 'Bank BCA', saldo: 10000000, jenis: 'Bank' },
             { id: '2', nama: 'Bank Mandiri', saldo: 5000000, jenis: 'Bank' },
-            { id: '3', nama: 'Kas Tangan', saldo: 500000, jenis: 'Kas' },
+            { id: '3', nama: 'Kas Tangan', saldo: 5000000, jenis: 'Kas' },
           ]
         };
       default:
