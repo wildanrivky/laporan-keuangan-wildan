@@ -85,11 +85,10 @@ export async function POST(request: Request) {
     });
     
     let headers = result.data.values?.[0] || [];
-    const values = Object.values(data);
     
     if (headers.length === 0) {
-      // Create headers
-      headers = Object.keys(data);
+      // Create headers in fixed order
+      headers = ['id', 'nama', 'nomor', 'saldo', 'jenis'];
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
         range: `${table}!1:1`,
@@ -98,11 +97,19 @@ export async function POST(request: Request) {
       });
     }
     
+    // Ensure values match header order
+    const values = headers.map(h => {
+      const val = data[h];
+      if (val === undefined || val === null) return '';
+      if (typeof val === 'number') return val;
+      return String(val);
+    });
+    
     // Append row
     await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
       range: `${table}!A:Z`,
-      valueInputOption: 'RAW',
+      valueInputOption: 'USER_ENTERED',
       requestBody: { values: [values] },
     });
     
@@ -140,19 +147,24 @@ export async function PUT(request: Request) {
     }
     
     // Find row
-    const rowIndex = rows.findIndex((row, i) => i > 0 && row[idIndex] === id);
+    const rowIndex = rows.findIndex((row, i) => i > 0 && String(row[idIndex]) === String(id));
     
     if (rowIndex === -1) {
       return NextResponse.json({ success: false, message: 'Data tidak ditemukan' }, { status: 404 });
     }
     
-    // Update row
-    const newValues = headers.map((h, i) => data[h] ?? '');
+    // Update row - ensure all columns are in correct order
+    const newValues = headers.map(h => {
+      const val = data[h];
+      if (val === undefined || val === null) return '';
+      if (typeof val === 'number') return val;
+      return String(val);
+    });
     
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
       range: `${table}!${rowIndex + 1}:${rowIndex + 1}`,
-      valueInputOption: 'RAW',
+      valueInputOption: 'USER_ENTERED',
       requestBody: { values: [newValues] },
     });
     
@@ -190,7 +202,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, message: 'Kolom id tidak ditemukan' }, { status: 400 });
     }
     
-    const rowIndex = rows.findIndex((row, i) => i > 0 && row[idIndex] === id);
+    const rowIndex = rows.findIndex((row, i) => i > 0 && String(row[idIndex]) === String(id));
     
     if (rowIndex === -1) {
       return NextResponse.json({ success: false, message: 'Data tidak ditemukan' }, { status: 404 });
