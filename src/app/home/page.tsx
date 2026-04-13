@@ -182,7 +182,9 @@ export default function Dashboard() {
   const [endDate, setEndDate] = useState(getDefaultDate());
   const [chartData, setChartData] = useState<{label: string; pendapatan: number; pengeluaran: number}[]>([]);
   
-  const selisih = 0;
+  const [totalSaldoRekening, setTotalSaldoRekening] = useState(0);
+  const saldoKasValue = dashboardData?.saldoKas || 0;
+  const selisih = saldoKasValue - totalSaldoRekening;
   
   useEffect(() => {
     setCurrentDate(new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
@@ -200,6 +202,12 @@ export default function Dashboard() {
         if (result.success && result.data) {
           setDashboardData(result.data);
           setTotalTransaksi(result.data.totalTransaksi || 0);
+          const rekeningData = (result.data.rekening || []).map((r: any) => ({
+            nama: r.nama,
+            saldo: r.saldo,
+          }));
+          const totalRek = rekeningData.reduce((acc: number, r: any) => acc + (parseInt(r.saldo) || 0), 0);
+          setTotalSaldoRekening(totalRek);
           setFormattedData({
             saldoKas: formatRupiah(result.data.saldoKas || 0),
             labaRugi: formatRupiah(result.data.labaRugi || 0),
@@ -210,8 +218,8 @@ export default function Dashboard() {
               ...t,
               jumlah: formatRupiah(t.jumlah),
             })),
-            rekening: (result.data.rekening || []).map((r: any) => ({
-              nama: r.nama,
+            rekening: rekeningData.map((r: any) => ({
+              ...r,
               saldo: formatRupiah(r.saldo),
             })),
           });

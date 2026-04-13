@@ -19,6 +19,7 @@ export default function CekRekeningPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saldoKas, setSaldoKas] = useState(0);
+  const [loadingSaldo, setLoadingSaldo] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -56,8 +57,55 @@ export default function CekRekeningPage() {
     }
   };
 
+  const refreshSaldoKas = async () => {
+    try {
+      setLoadingSaldo(true);
+      const res = await fetch('/api/sheets?action=dashboard');
+      const result = await res.json();
+      if (result.success && result.data) {
+        setSaldoKas(result.data.saldoKas || 0);
+      }
+    } catch (err) {
+      console.error('Error fetching saldo:', err);
+    } finally {
+      setLoadingSaldo(false);
+    }
+  };
+
   useEffect(() => {
-    fetchRekening();
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setLoadingSaldo(true);
+        
+        const [rekRes, dashRes] = await Promise.all([
+          fetch(`${API_URL}?table=Rekening`),
+          fetch('/api/sheets?action=dashboard'),
+        ]);
+        
+        const rekResult = await rekRes.json();
+        if (rekResult.success && rekResult.data) {
+          setRekening(rekResult.data.map((r: any) => ({
+            id: r.id || r.nama,
+            nama: r.nama || '',
+            nomor: r.nomor || '',
+            saldo: parseInt(r.saldo) || 0,
+            jenis: r.jenis || 'Bank',
+          })));
+        }
+        
+        const dashResult = await dashRes.json();
+        if (dashResult.success && dashResult.data) {
+          setSaldoKas(dashResult.data.saldoKas || 0);
+        }
+      } catch (err) {
+        console.error('Error fetching data:', err);
+      } finally {
+        setLoading(false);
+        setLoadingSaldo(false);
+      }
+    };
+    fetchData();
   }, []);
 
   const totalSaldoRekening = rekening.reduce((acc, r) => acc + r.saldo, 0);
@@ -91,6 +139,7 @@ export default function CekRekeningPage() {
       }
 
       await fetchRekening();
+      await refreshSaldoKas();
       setShowModal(false);
       setEditId(null);
       setFormData(resetForm());
@@ -118,6 +167,7 @@ export default function CekRekeningPage() {
       setSaving(true);
       await fetch(`${API_URL}?table=Rekening&id=${id}`, { method: 'DELETE' });
       await fetchRekening();
+      await refreshSaldoKas();
     } catch (err: any) {
       alert('Gagal menghapus: ' + err.message);
     } finally {
@@ -154,16 +204,20 @@ export default function CekRekeningPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-600">Saldo di Laporan Keuangan</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1">{formatRupiah(saldoKas)}</p>
+                <p className="text-2xl font-bold text-slate-900 mt-1">
+                  {loadingSaldo ? '...' : formatRupiah(saldoKas)}
+                </p>
               </div>
               <div className="text-center">
-                {isMatch ? (
+                {loadingSaldo ? (
+                  <div className="w-12 h-12 border-4 border-slate-200 border-t-emerald-500 rounded-full animate-spin" />
+                ) : isMatch ? (
                   <CheckCircle className="text-emerald-600 mx-auto" size={48} />
                 ) : (
                   <AlertTriangle className="text-red-600 mx-auto" size={48} />
                 )}
                 <p className={`text-lg font-semibold mt-2 ${isMatch ? 'text-emerald-700' : 'text-red-700'}`}>
-                  {isMatch ? 'SESUAI' : 'TIDAK SESUAI'}
+                  {loadingSaldo ? '...' : (isMatch ? 'SESUAI' : 'TIDAK SESUAI')}
                 </p>
               </div>
               <div className="text-right">
@@ -175,7 +229,7 @@ export default function CekRekeningPage() {
               <div className="flex items-center justify-between">
                 <p className="text-sm text-slate-600">Selisih</p>
                 <p className={`text-xl font-bold ${selisih === 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {selisih === 0 ? 'Rp 0' : formatRupiah(selisih)}
+                  {loadingSaldo ? '...' : (selisih === 0 ? 'Rp 0' : formatRupiah(selisih))}
                 </p>
               </div>
             </div>
