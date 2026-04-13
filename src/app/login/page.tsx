@@ -1,21 +1,36 @@
 'use client';
 
 import { useState } from 'react';
-import { LogIn, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { LogIn, Lock, Eye, EyeOff } from 'lucide-react';
+
+const ADMIN_USER = 'newildanr';
+const ADMIN_PASS = 'Borobudur5!!';
 
 export default function LoginPage() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError('');
+
     setTimeout(() => {
-      alert('Login berhasil! (Demo only - belum terhubung ke auth)');
-      setIsLoading(false);
-    }, 1000);
+      if (username === ADMIN_USER && password === ADMIN_PASS) {
+        document.cookie = 'isLoggedIn=true; path=/; max-age=86400';
+        localStorage.setItem('isLoggedIn', 'true');
+        localStorage.setItem('adminUser', username);
+        router.push('/');
+      } else {
+        setError('Username atau password salah');
+        setIsLoading(false);
+      }
+    }, 500);
   };
 
   return (
@@ -26,21 +41,20 @@ export default function LoginPage() {
             <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <LogIn className="text-emerald-600" size={32} />
             </div>
-            <h1 className="text-2xl font-bold text-slate-900">Login</h1>
-            <p className="text-slate-500 mt-2">Masuk ke akun Anda</p>
+            <h1 className="text-2xl font-bold text-slate-900">Login Admin</h1>
+            <p className="text-slate-500 mt-2">Masuk ke sistem laporan keuangan</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="label">Email</label>
+              <label className="label">Username</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                 <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="input pl-10"
-                  placeholder="email@contoh.com"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="input"
+                  placeholder="Masukkan username"
                   required
                 />
               </div>
@@ -68,15 +82,11 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="w-4 h-4 text-emerald-600 rounded" />
-                <span className="text-sm text-slate-600">Ingat saya</span>
-              </label>
-              <a href="#" className="text-sm text-emerald-600 hover:text-emerald-700">
-                Lupa password?
-              </a>
-            </div>
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-600">{error}</p>
+              </div>
+            )}
 
             <button
               type="submit"
@@ -93,25 +103,10 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-
-          <div className="mt-6 pt-6 border-t border-slate-200">
-            <p className="text-center text-sm text-slate-500">
-              Belum punya akun?{' '}
-              <a href="#" className="text-emerald-600 hover:text-emerald-700 font-medium">
-                Daftar di sini
-              </a>
-            </p>
-          </div>
-
-          <div className="mt-6 p-4 bg-slate-50 rounded-lg">
-            <p className="text-xs text-slate-500 text-center">
-              Demo: Klik "Masuk" untuk simulasi login berhasil
-            </p>
-          </div>
         </div>
 
         <p className="text-center text-slate-400 text-sm mt-6">
-          Laporan Keuangan UMKM v1.0
+          Laporan Keuangan Wildan Chevy v1.0
         </p>
       </div>
     </div>
