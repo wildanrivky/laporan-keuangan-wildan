@@ -43,6 +43,7 @@ export async function GET(request: Request) {
   const table = searchParams.get('table') || 'Rekening';
   
   try {
+    console.log('GET request for table:', table);
     const { sheets } = await getSheet(table);
     
     const result = await sheets.spreadsheets.values.get({
@@ -56,6 +57,9 @@ export async function GET(request: Request) {
     }
     
     const headers = rows[0];
+    console.log('GET headers:', headers);
+    console.log('GET row count:', rows.length - 1);
+    
     const data = rows.slice(1).map(row => {
       const obj: any = {};
       headers.forEach((header, i) => {
@@ -127,6 +131,8 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const { table, data, id } = body;
     
+    console.log('PUT request:', { table, id, data });
+    
     const { sheets } = await getSheet(table);
     
     // Get all data
@@ -141,26 +147,36 @@ export async function PUT(request: Request) {
     }
     
     const headers = rows[0];
+    console.log('Headers:', headers);
+    
     const idIndex = headers.indexOf('id');
     
     if (idIndex === -1) {
       return NextResponse.json({ success: false, message: 'Kolom id tidak ditemukan' }, { status: 400 });
     }
     
-    // Find row
+    // Find row - debug
+    console.log('Looking for id:', id, 'type:', typeof id);
+    rows.forEach((row, i) => {
+      if (i > 0) console.log(`Row ${i}: id=${row[idIndex]}, type=${typeof row[idIndex]}`);
+    });
+    
     const rowIndex = rows.findIndex((row, i) => i > 0 && String(row[idIndex]) === String(id));
+    console.log('Found rowIndex:', rowIndex);
     
     if (rowIndex === -1) {
-      return NextResponse.json({ success: false, message: 'Data tidak ditemukan' }, { status: 404 });
+      return NextResponse.json({ success: false, message: `Data tidak ditemukan, id: ${id}` }, { status: 404 });
     }
     
     // Update row - ensure all columns are in correct order
     const newValues = headers.map(h => {
       const val = data[h];
+      console.log(`Header ${h}: value=${val}`);
       if (val === undefined || val === null) return '';
       if (typeof val === 'number') return val;
       return String(val);
     });
+    console.log('Updating row with:', newValues);
     
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
@@ -183,6 +199,8 @@ export async function DELETE(request: Request) {
     const table = searchParams.get('table') || 'Rekening';
     const id = searchParams.get('id');
     
+    console.log('DELETE request:', { table, id });
+    
     if (!id) {
       return NextResponse.json({ success: false, message: 'ID diperlukan' }, { status: 400 });
     }
@@ -197,16 +215,23 @@ export async function DELETE(request: Request) {
     
     const rows = result.data.values || [];
     const headers = rows[0];
+    console.log('DELETE headers:', headers);
     const idIndex = headers.indexOf('id');
     
     if (idIndex === -1) {
       return NextResponse.json({ success: false, message: 'Kolom id tidak ditemukan' }, { status: 400 });
     }
     
+    // Debug: print all ids
+    rows.forEach((row, i) => {
+      if (i > 0) console.log(`Row ${i}: id=${row[idIndex]}`);
+    });
+    
     const rowIndex = rows.findIndex((row, i) => i > 0 && String(row[idIndex]) === String(id));
+    console.log('Found rowIndex for delete:', rowIndex);
     
     if (rowIndex === -1) {
-      return NextResponse.json({ success: false, message: 'Data tidak ditemukan' }, { status: 404 });
+      return NextResponse.json({ success: false, message: `Data tidak ditemukan, id: ${id}` }, { status: 404 });
     }
     
     // Delete row - use actual sheetId and correct indices
