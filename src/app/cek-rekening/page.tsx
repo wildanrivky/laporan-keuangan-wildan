@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CheckCircle, AlertTriangle, Wallet, Building, PiggyBank, Plus, Edit2, Trash2, X } from 'lucide-react';
 import { formatRupiah } from '@/lib/api';
 
@@ -11,6 +11,8 @@ type Rekening = {
   saldo: number;
   jenis: string;
 };
+
+const STORAGE_KEY = 'rekening_data';
 
 export default function CekRekeningPage() {
   const [rekening, setRekening] = useState<Rekening[]>([]);
@@ -30,6 +32,17 @@ export default function CekRekeningPage() {
     saldo: '',
     jenis: 'Bank',
   });
+
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      setRekening(JSON.parse(saved));
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(rekening));
+  }, [rekening]);
 
   const totalSaldoRekening = rekening.reduce((acc, r) => acc + r.saldo, 0);
   const selisih = saldoKas - totalSaldoRekening;

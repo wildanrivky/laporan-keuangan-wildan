@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit2, ArrowUpRight, ArrowDownRight, X } from 'lucide-react';
 
 type Kategori = {
@@ -9,19 +9,23 @@ type Kategori = {
   tipe: 'debit' | 'credit';
 };
 
+const STORAGE_KEY = 'kategori_data';
+
+const defaultKategori: Kategori[] = [
+  { id: '1', nama: 'Pendapatan Jasa', tipe: 'debit' },
+  { id: '2', nama: 'Pendapatan Produksi', tipe: 'debit' },
+  { id: '3', nama: 'Pendapatan Lain', tipe: 'debit' },
+  { id: '4', nama: 'Persediaan', tipe: 'credit' },
+  { id: '5', nama: 'Perlengkapan', tipe: 'credit' },
+  { id: '6', nama: 'Biaya Listrik', tipe: 'credit' },
+  { id: '7', nama: 'Biaya Internet', tipe: 'credit' },
+  { id: '8', nama: 'Biaya Sewa', tipe: 'credit' },
+  { id: '9', nama: 'Biaya Gaji', tipe: 'credit' },
+  { id: '10', nama: 'Biaya Transport', tipe: 'credit' },
+];
+
 export default function KategoriPage() {
-  const [kategori, setKategori] = useState<Kategori[]>([
-    { id: '1', nama: 'Pendapatan Jasa', tipe: 'debit' },
-    { id: '2', nama: 'Pendapatan Produksi', tipe: 'debit' },
-    { id: '3', nama: 'Pendapatan Lain', tipe: 'debit' },
-    { id: '4', nama: 'Persediaan', tipe: 'credit' },
-    { id: '5', nama: 'Perlengkapan', tipe: 'credit' },
-    { id: '6', nama: 'Biaya Listrik', tipe: 'credit' },
-    { id: '7', nama: 'Biaya Internet', tipe: 'credit' },
-    { id: '8', nama: 'Biaya Sewa', tipe: 'credit' },
-    { id: '9', nama: 'Biaya Gaji', tipe: 'credit' },
-    { id: '10', nama: 'Biaya Transport', tipe: 'credit' },
-  ]);
+  const [kategori, setKategori] = useState<Kategori[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -33,6 +37,22 @@ export default function KategoriPage() {
     nama: '',
     tipe: 'debit' as 'debit' | 'credit',
   });
+
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      setKategori(JSON.parse(saved));
+    } else {
+      setKategori(defaultKategori);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultKategori));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (kategori.length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(kategori));
+    }
+  }, [kategori]);
 
   const kategoriDebit = kategori.filter(k => k.tipe === 'debit');
   const kategoriCredit = kategori.filter(k => k.tipe === 'credit');
