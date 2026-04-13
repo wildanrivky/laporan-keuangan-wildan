@@ -24,33 +24,27 @@ async function getSheet(name: string) {
   let sheet = spreadsheet.data.sheets?.find(s => s.properties?.title === name);
   let sheetId = sheet?.properties?.sheetId;
   
-  if (!sheet) {
-    const res = await sheets.spreadsheets.batchUpdate({
-      spreadsheetId: SPREADSHEET_ID,
-      requestBody: {
-        requests: [{ addSheet: { properties: { title: name } } }]
-      }
-    });
-    sheetId = res.data.replies?.[0]?.addSheet?.properties?.sheetId;
-  } else {
-    // Check if headers need fixing - get first row
+  const correctHeaders = name === 'Rekening' 
+    ? ['id', 'nama', 'nomor', 'saldo', 'jenis']
+    : ['id', 'nama', 'tipe'];
+  
+  // Always check and fix headers
+  if (sheet && sheetId) {
     const headerResult = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${name}!1:1`,
+      range: `${name}!A1:Z1`,
     });
     const headers = headerResult.data.values?.[0] || [];
     
-    const correctHeaders = name === 'Rekening' 
-      ? ['id', 'nama', 'nomor', 'saldo', 'jenis']
-      : ['id', 'nama', 'tipe'];
-    
-    // If headers are wrong, delete and recreate sheet
     const needsFix = headers.length !== correctHeaders.length || 
                      headers[0] !== 'id' ||
                      (name === 'Rekening' && headers.length < 5);
     
+    console.log(`Sheet ${name} headers:`, headers, 'needsFix:', needsFix);
+    
     if (needsFix) {
-      console.log(`Fixing sheet ${name} - deleting and recreating with correct headers`);
+      // Delete and recreate
+      console.log(`Deleting and recreating sheet ${name}`);
       await sheets.spreadsheets.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
         requestBody: {
@@ -65,7 +59,33 @@ async function getSheet(name: string) {
         }
       });
       sheetId = res.data.replies?.[0]?.addSheet?.properties?.sheetId;
+      
+      // Write headers immediately
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${name}!1:1`,
+        valueInputOption: 'RAW',
+        requestBody: { values: [correctHeaders] },
+      });
+      console.log(`Created headers for ${name}:`, correctHeaders);
     }
+  } else if (!sheet) {
+    // Create new sheet with headers
+    const res = await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: {
+        requests: [{ addSheet: { properties: { title: name } } }]
+      }
+    });
+    sheetId = res.data.replies?.[0]?.addSheet?.properties?.sheetId;
+    
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${name}!1:1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [correctHeaders] },
+    });
+    console.log(`Created new sheet ${name} with headers:`, correctHeaders);
   }
   
   return { sheets, sheetId };
@@ -84,28 +104,7 @@ export async function GET(request: Request) {
       range: `${table}!A:Z`,
     });
     
-    let rows = result.data.values || [];
-    
-    // Define correct headers
-    const correctHeaders = table === 'Rekening' 
-      ? ['id', 'nama', 'nomor', 'saldo', 'jenis']
-      : ['id', 'nama', 'tipe'];
-    
-    // Fix header if needed
-    if (rows.length === 0 || rows[0][0] !== 'id' || (table === 'Rekening' && rows[0].length < 5)) {
-      console.log('Initializing headers for', table);
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${table}!1:1`,
-        valueInputOption: 'RAW',
-        requestBody: { values: [correctHeaders] },
-      });
-      const newResult = await sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${table}!A:Z`,
-      });
-      rows = newResult.data.values || [];
-    }
+    const rows = result.data.values || [];
     
     if (rows.length === 0) {
       return NextResponse.json({ success: true, data: [] });
@@ -135,33 +134,29 @@ export async function POST(request: Request) {
     
     const { sheets } = await getSheet(table);
     
-    // Get current header
+    // Get headers (already fixed by getSheet)
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `${table}!1:1`,
     });
     
-    let currentHeaders = result.data.values?.[0] || [];
-    
-    // Define correct headers for each table
+    const headers = result.data.values?.[0] || [];
     const correctHeaders = table === 'Rekening' 
       ? ['id', 'nama', 'nomor', 'saldo', 'jenis']
       : ['id', 'nama', 'tipe'];
     
-    // Force create correct headers
-    if (currentHeaders.length === 0 || currentHeaders.join(',') !== correctHeaders.join(',')) {
-      console.log(`Creating headers for ${table}:`, correctHeaders);
+    // Ensure headers are correct
+    if (headers.join(',') !== correctHeaders.join(',')) {
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
         range: `${table}!1:1`,
         valueInputOption: 'RAW',
         requestBody: { values: [correctHeaders] },
       });
-      currentHeaders = correctHeaders;
     }
     
-    // Ensure values match header order
-    const values = currentHeaders.map(h => {
+    // Map values to headers
+    const values = correctHeaders.map(h => {
       const val = data[h];
       if (val === undefined || val === null) return '';
       if (typeof val === 'number') return val;
